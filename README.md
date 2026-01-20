@@ -38,6 +38,7 @@ cd discord-crypto-spam-destroyer
 
 2) Create `.env`:
 
+(See `Where to get keys` below if you aren't sure where to find these)
 ```bash
 DISCORD_TOKEN=...
 OPENAI_API_KEY=...
@@ -45,11 +46,19 @@ MOD_CHANNEL=...
 MOD_ROLE_ID=...
 ```
 
+2.5) Optional: make sure your APIs are working before you run the full bot:
+
+```bash
+make test-discord # Sends a preview of the report UI to your mod channel
+make test-openai # Asks OpenAI if the images stored under known_bad_scam_images are scams and reports back to you
+```
+
 3) Run:
 
 ```bash
 make run-bot
 ```
+(You can run with Docker, see below)
 
 ## Where to get keys
 
@@ -62,6 +71,8 @@ OpenAI API key (optional if using hash‑only mode):
 - https://platform.openai.com/api-keys
 - Create a key and paste it into `.env`
 - If you’re using restricted keys, enable `chat.completions` request access and make sure the key can call `gpt-4o-mini`
+
+Don't forget to add your mod channel ID and Mod allow-list role by right clicking the channel and selecting copy ID on the role and the channel
 
 If you want hash‑only mode, omit `OPENAI_API_KEY` and set `HASH_ONLY_MODE=true`.
 
@@ -83,7 +94,7 @@ Required:
 
 Optional (defaults shown):
 
-- `OPENAI_API_KEY` — OpenAI key for vision classification.
+- `OPENAI_API_KEY` — **Highly recommended**: OpenAI key for vision classification.
 - `OPENAI_MODEL` (gpt-4o-mini) — model for image classification (our sample images are ~512x512, so per‑image cost is very low).
 - `HASH_ONLY_MODE` (false) — skip OpenAI and use hash denylist only.
 - `MIN_IMAGE_COUNT` (3) — min images on a message to trigger the bot. I find that these bots always post >=3 images, tune this lower at the risk of incurring more OpenAI API costs
@@ -104,7 +115,7 @@ Optional (defaults shown):
 ## Running with Docker
 
 ```bash
-# create .env with DISCORD_TOKEN and OPENAI_API_KEY
+#  Make sure you created the .env file
 
 docker build -t discord-crypto-spam-destroyer .
 docker run --env-file .env discord-crypto-spam-destroyer
@@ -128,7 +139,13 @@ make hashes
 Test OpenAI vision on a sample image:
 
 ```bash
-make check-images
+make test-openai
+```
+
+Send a dummy mod report to verify Discord permissions:
+
+```bash
+make test-discord
 ```
 
 ## Testing

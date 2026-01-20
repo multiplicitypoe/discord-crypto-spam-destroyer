@@ -15,7 +15,7 @@ except ModuleNotFoundError:
     from discord_crypto_spam_destroyer.discord_ui.mod_report import ReportContext, ReportView
     from discord_crypto_spam_destroyer.hashes.store import FileHashStore
 
-DEFAULT_MOD_CHANNEL_ID = "1430638469339942912"
+MOD_CHANNEL_ENV = "MOD_CHANNEL"
 
 
 @dataclass(frozen=True)
@@ -80,7 +80,9 @@ class TestReportBot(discord.Client):
 
 async def resolve_target(client: discord.Client) -> TargetInfo | None:
     guild_id = os.getenv("GUILD_ID")
-    mod_channel = os.getenv("MOD_CHANNEL", DEFAULT_MOD_CHANNEL_ID)
+    mod_channel = os.getenv(MOD_CHANNEL_ENV)
+    if not mod_channel:
+        raise SystemExit("MOD_CHANNEL not set")
     target_user_id = os.getenv("TEST_TARGET_ID")
 
     guild: discord.Guild | None = None

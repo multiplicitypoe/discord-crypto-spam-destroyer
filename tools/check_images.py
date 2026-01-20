@@ -17,10 +17,7 @@ def load_api_key() -> str:
     api_key = os.getenv("OPENAI_API_KEY")
     if api_key:
         return api_key
-    key_path = Path("OPENAI_KEY.txt")
-    if key_path.exists():
-        return key_path.read_text(encoding="utf-8").strip()
-    raise SystemExit("OPENAI_API_KEY not set and OPENAI_KEY.txt not found")
+    raise SystemExit("OPENAI_API_KEY not set")
 
 
 def iter_images(limit: int) -> list[Path]:
