@@ -4,7 +4,7 @@ from typing import Literal
 
 import discord
 
-ActionHigh = Literal["kick", "ban", "report_only"]
+ActionHigh = Literal["kick", "ban", "report_only", "softban"]
 
 
 async def safe_delete(message: discord.Message) -> bool:
@@ -33,10 +33,21 @@ async def safe_kick(guild: discord.Guild, user_id: int, reason: str) -> bool:
         return False
 
 
-async def safe_ban(guild: discord.Guild, user_id: int, reason: str) -> bool:
+async def safe_unban(guild: discord.Guild, user_id: int, reason: str) -> bool:
+    try:
+        await guild.unban(discord.Object(id=user_id), reason=reason)
+        return True
+    except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+        return False
+
+
+async def safe_ban(guild: discord.Guild, user_id: int, reason: str, delete_days: int | None = None) -> bool:
     target = guild.get_member(user_id) or discord.Object(id=user_id)
     try:
-        await guild.ban(target, reason=reason)
+        if delete_days is not None:
+            await guild.ban(target, reason=reason, delete_message_days=delete_days)
+        else:
+            await guild.ban(target, reason=reason)
         return True
     except (discord.NotFound, discord.Forbidden, discord.HTTPException):
         return False
@@ -50,6 +61,10 @@ async def apply_high_action(
 ) -> bool:
     if action == "report_only":
         return True
+    if action == "softban":
+        if not await safe_ban(guild, user_id, reason, delete_days=1):
+            return False
+        return await safe_unban(guild, user_id, reason)
     if action == "ban":
         return await safe_ban(guild, user_id, reason)
     return await safe_kick(guild, user_id, reason)

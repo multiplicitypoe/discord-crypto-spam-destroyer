@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from pathlib import Path
 
 import discord
@@ -38,6 +39,7 @@ class CryptoSpamBot(discord.Client):
         self.settings = settings
         self.hash_store = FileHashStore(Path(settings.known_bad_hash_path))
         self.tree = app_commands.CommandTree(self)
+        self._report_cooldown: dict[int, float] = {}
 
     async def on_ready(self) -> None:
         logger.info("Logged in as %s", self.user)
@@ -84,16 +86,17 @@ class CryptoSpamBot(discord.Client):
                 confidence=1.0,
                 reason="Known bad crypto scam hash",
             )
-            await self._send_report(
-                message,
-                message.author,
-                vision_result=None,
-                downloaded=downloaded,
-                all_hashes=phashes,
-                reason_override="Known bad hash match",
-                action_taken=self._format_action_taken(delete_result, action_result),
-                allow_hash_add=False,
-            )
+            if self._report_allowed(message.author.id):
+                await self._send_report(
+                    message,
+                    message.author,
+                    vision_result=None,
+                    downloaded=downloaded,
+                    all_hashes=phashes,
+                    reason_override="Known bad hash match",
+                    action_taken=self._format_action_taken(delete_result, action_result),
+                    allow_hash_add=False,
+                )
             return
 
         if not phashes:
@@ -164,7 +167,7 @@ class CryptoSpamBot(discord.Client):
                 confidence=vision_result.confidence,
                 reason="High confidence crypto scam",
             )
-            if self.settings.report_high:
+            if self.settings.report_high and self._report_allowed(message.author.id):
                 logger.info("Message %s reporting high confidence scam", message.id)
                 await self._send_report(
                     message,
@@ -182,16 +185,17 @@ class CryptoSpamBot(discord.Client):
                 logger.info("Message %s deleted without report", message.id)
             return
 
-        logger.info("Message %s medium confidence scam, sending report", message.id)
-        await self._send_report(
-            message,
-            message.author,
-            vision_result,
-            downloaded,
-            phashes,
-            action_taken=self._format_action_taken(delete_result, None),
-            allow_hash_add=True,
-        )
+        if self._report_allowed(message.author.id):
+            logger.info("Message %s medium confidence scam, sending report", message.id)
+            await self._send_report(
+                message,
+                message.author,
+                vision_result,
+                downloaded,
+                phashes,
+                action_taken=self._format_action_taken(delete_result, None),
+                allow_hash_add=True,
+            )
 
     async def _send_report(
         self,
@@ -246,6 +250,7 @@ class CryptoSpamBot(discord.Client):
             all_hashes=list(all_hashes),
             mod_role_id=self.settings.mod_role_id,
             allow_hash_add=allow_hash_add,
+            kick_disabled=self.settings.action_high != "kick",
         )
         view = ReportView(context)
         files = build_mod_files(downloaded)
@@ -317,13 +322,30 @@ class CryptoSpamBot(discord.Client):
             if member and any(role.id == self.settings.mod_role_id for role in member.roles):
                 return "no kick (author is Mod)"
         success = await apply_high_action(guild, author.id, self.settings.action_high, reason)
-        return "kick" if success and self.settings.action_high == "kick" else "ban" if success else "kick failed"
+        if not success:
+            return "kick failed"
+        if self.settings.action_high == "softban":
+            return "softban"
+        if self.settings.action_high == "ban":
+            return "ban"
+        return "kick"
 
     def _format_action_taken(self, deleted: bool, action_result: str | None) -> str:
         actions = ["deleted" if deleted else "not deleted"]
         if action_result:
             actions.append(action_result)
         return ", ".join(actions)
+
+    def _report_allowed(self, user_id: int) -> bool:
+        cooldown = self.settings.report_cooldown_s
+        if cooldown <= 0:
+            return True
+        now = time.monotonic()
+        last = self._report_cooldown.get(user_id)
+        if last and now - last < cooldown:
+            return False
+        self._report_cooldown[user_id] = now
+        return True
 
     async def _get_member(self, guild: discord.Guild, user_id: int) -> discord.Member | None:
         member = guild.get_member(user_id)

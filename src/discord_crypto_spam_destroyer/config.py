@@ -4,7 +4,7 @@ import os
 from dataclasses import dataclass
 from typing import Literal, cast
 
-ActionHigh = Literal["kick", "ban", "report_only"]
+ActionHigh = Literal["kick", "ban", "softban", "report_only"]
 ActionMedium = Literal["delete_and_report", "delete_only"]
 
 
@@ -23,6 +23,7 @@ class Settings:
     mod_channel: str | None
     mod_role_id: int | None
     report_high: bool
+    report_cooldown_s: float
     hash_only_mode: bool
     debug_logs: bool
     download_timeout_s: float
@@ -68,8 +69,8 @@ def load_settings() -> Settings:
         raise ValueError("DISCORD_TOKEN is required")
 
     action_high = _env("ACTION_HIGH", "kick")
-    if action_high not in {"kick", "ban", "report_only"}:
-        raise ValueError("ACTION_HIGH must be 'kick', 'ban', or 'report_only'")
+    if action_high not in {"kick", "ban", "softban", "report_only"}:
+        raise ValueError("ACTION_HIGH must be 'kick', 'ban', 'softban', or 'report_only'")
 
     action_medium = _env("ACTION_MEDIUM", "delete_and_report")
     if action_medium not in {"delete_and_report", "delete_only"}:
@@ -94,6 +95,7 @@ def load_settings() -> Settings:
         mod_channel=_env_optional("MOD_CHANNEL"),
         mod_role_id=int(mod_role_value) if mod_role_value else None,
         report_high=_env_bool("REPORT_HIGH", True),
+        report_cooldown_s=_env_float("REPORT_COOLDOWN_S", 20.0),
         hash_only_mode=_env_bool("HASH_ONLY_MODE", False),
         debug_logs=_env_bool("DEBUG_LOGS", False),
         download_timeout_s=_env_float("DOWNLOAD_TIMEOUT_S", 8.0),

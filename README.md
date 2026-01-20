@@ -9,11 +9,12 @@ These scams are repetitive, but hard to catch with the native Discord Automodera
 ## What it does
 
 - Watches guild text channels
-- Only looks at messages with N or more images (default 3) to reduce noise and cost.
-- Checks a file‑based hash denylist first.
+- Checks every message that has at least one image against the hash denylist.
+- Only calls OpenAI if the message has N or more images (default 3) to keep costs down.
 - Optional OpenAI vision classification for unknown images.
   - Cost note: with `gpt-4o-mini`, our 512x512-ish scam images are a tiny fraction of a cent each. 
-- Deletes scams and optionally kicks/bans or just reports to a configured mod channel. (See below for images)
+- Deletes scams and optionally kicks, bans, softbans (ban+unban), or just reports to a configured mod channel. (See below for images)
+- Auto‑actions can do a softban (ban then unban) to clear recent messages.
 - Mod report includes action taken, author roles, and locks buttons after one action.
 - `/add_hash` slash command lets mods upload an image to add its hash.
 
@@ -58,7 +59,8 @@ make test-openai # Asks OpenAI if the images stored under known_bad_scam_images 
 ```bash
 make run-bot
 ```
-(You can run with Docker, see below)
+Having trouble? Consider setting DEBUG_LOGS=true to print verbose logs for each message being processed
+For Docker setup, see below
 
 ## Where to get keys
 
@@ -97,14 +99,15 @@ Optional (defaults shown):
 - `OPENAI_API_KEY` — **Highly recommended**: OpenAI key for vision classification.
 - `OPENAI_MODEL` (gpt-4o-mini) — model for image classification (our sample images are ~512x512, so per‑image cost is very low).
 - `HASH_ONLY_MODE` (false) — skip OpenAI and use hash denylist only.
-- `MIN_IMAGE_COUNT` (3) — min images on a message to trigger the bot. I find that these bots always post >=3 images, tune this lower at the risk of incurring more OpenAI API costs
-- `MAX_IMAGES_TO_ANALYZE` (4) — cap on images per message.
+- `MIN_IMAGE_COUNT` (3) — min images required before OpenAI is called. Hash checks still run on any message with images. 
+- `MAX_IMAGES_TO_ANALYZE` (4) — cap on images analyzed per message
 - `KNOWN_BAD_HASH_PATH` (data/bad_hashes.txt) — denylist storage path.
-- `ACTION_HIGH` (kick) — `kick`, `ban`, or `report_only` for high confidence.
+- `ACTION_HIGH` (kick) — `kick`, `ban`, `softban` (ban+unban, deletes recent messages), or `report_only` for high confidence.
 - `ACTION_MEDIUM` (delete_and_report) — `delete_and_report` or `delete_only`.
 - `CONFIDENCE_HIGH` (0.85) — high confidence cutoff.
 - `CONFIDENCE_MEDIUM` (0.65) — medium confidence cutoff.
 - `REPORT_HIGH` (true) — also report high‑confidence cases to mods.
+- `REPORT_COOLDOWN_S` (20) — suppress duplicate reports per user during bursts.
 - `DEBUG_LOGS` (false) — verbose per‑message logging for troubleshooting.
 - `DOWNLOAD_TIMEOUT_S` (8.0) — image download timeout.
 - `MAX_IMAGE_BYTES` (5000000) — max image size.
@@ -152,6 +155,5 @@ make test-discord
 ## Testing
 
 ```bash
-. .venv/bin/activate
-pytest
+make test
 ```

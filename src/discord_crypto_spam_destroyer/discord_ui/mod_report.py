@@ -23,6 +23,7 @@ class ReportContext:
     all_hashes: list[str]
     mod_role_id: int | None
     allow_hash_add: bool
+    kick_disabled: bool
 
 
 class ReportView(discord.ui.View):
@@ -33,6 +34,9 @@ class ReportView(discord.ui.View):
     ) -> None:
         super().__init__(timeout=timeout)
         self.context = context
+        for child in self.children:
+            if isinstance(child, discord.ui.Button) and child.label == "Kick":
+                child.disabled = context.kick_disabled
 
     async def _ensure_permissions(self, interaction: discord.Interaction, permission: str) -> bool:
         if not interaction.user or not isinstance(interaction.user, discord.Member):
@@ -73,6 +77,9 @@ class ReportView(discord.ui.View):
         button: discord.ui.Button,
     ) -> None:
         if not await self._ensure_permissions(interaction, "kick"):
+            return
+        if self.context.kick_disabled:
+            await self._finalize_action(interaction, "Kick disabled for auto-actions")
             return
         success = await apply_high_action(
             self.context.guild,
