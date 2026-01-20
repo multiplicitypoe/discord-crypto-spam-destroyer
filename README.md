@@ -105,6 +105,7 @@ Optional (defaults shown):
 - `CONFIDENCE_HIGH` (0.85) — high confidence cutoff.
 - `CONFIDENCE_MEDIUM` (0.65) — medium confidence cutoff.
 - `REPORT_HIGH` (true) — also report high‑confidence cases to mods.
+- `DEBUG_LOGS` (false) — verbose per‑message logging for troubleshooting.
 - `DOWNLOAD_TIMEOUT_S` (8.0) — image download timeout.
 - `MAX_IMAGE_BYTES` (5000000) — max image size.
 

@@ -24,6 +24,7 @@ class Settings:
     mod_role_id: int | None
     report_high: bool
     hash_only_mode: bool
+    debug_logs: bool
     download_timeout_s: float
     max_image_bytes: int
 
@@ -94,6 +95,7 @@ def load_settings() -> Settings:
         mod_role_id=int(mod_role_value) if mod_role_value else None,
         report_high=_env_bool("REPORT_HIGH", True),
         hash_only_mode=_env_bool("HASH_ONLY_MODE", False),
+        debug_logs=_env_bool("DEBUG_LOGS", False),
         download_timeout_s=_env_float("DOWNLOAD_TIMEOUT_S", 8.0),
         max_image_bytes=_env_int("MAX_IMAGE_BYTES", 5_000_000),
     )

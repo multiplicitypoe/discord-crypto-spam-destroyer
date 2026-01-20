@@ -48,25 +48,27 @@ class CryptoSpamBot(discord.Client):
             return
 
         attachments = [a for a in message.attachments if is_image_attachment(a)]
-        logger.info(
-            "Message %s in #%s: %s attachments (%s images)",
-            message.id,
-            getattr(message.channel, "name", "unknown"),
-            len(message.attachments),
-            len(attachments),
-        )
+        if self.settings.debug_logs:
+            logger.info(
+                "Message %s in #%s: %s attachments (%s images)",
+                message.id,
+                getattr(message.channel, "name", "unknown"),
+                len(message.attachments),
+                len(attachments),
+            )
         selection = select_images(
             [a.url for a in attachments],
             self.settings.min_image_count,
             self.settings.max_images_to_analyze,
         )
         if not selection.qualifies:
-            logger.info(
-                "Message %s skipped: need %s images, got %s",
-                message.id,
-                self.settings.min_image_count,
-                selection.total_images,
-            )
+            if self.settings.debug_logs:
+                logger.info(
+                    "Message %s skipped: need %s images, got %s",
+                    message.id,
+                    self.settings.min_image_count,
+                    selection.total_images,
+                )
             return
 
         downloaded: list[DownloadedImage] = []
@@ -80,7 +82,8 @@ class CryptoSpamBot(discord.Client):
                 downloaded.append(downloaded_image)
 
         if not downloaded:
-            logger.info("Message %s skipped: could not download images", message.id)
+            if self.settings.debug_logs:
+                logger.info("Message %s skipped: could not download images", message.id)
             return
 
         images = [image.data for image in downloaded]
@@ -109,15 +112,18 @@ class CryptoSpamBot(discord.Client):
             return
 
         if not phashes:
-            logger.info("Message %s skipped: no valid hashes", message.id)
+            if self.settings.debug_logs:
+                logger.info("Message %s skipped: no valid hashes", message.id)
             return
 
         if self.settings.hash_only_mode:
-            logger.info("Message %s skipped: hash-only mode", message.id)
+            if self.settings.debug_logs:
+                logger.info("Message %s skipped: hash-only mode", message.id)
             return
 
         if not self.settings.openai_api_key:
-            logger.info("Message %s skipped: OPENAI_API_KEY not set", message.id)
+            if self.settings.debug_logs:
+                logger.info("Message %s skipped: OPENAI_API_KEY not set", message.id)
             return
 
         images_base64 = [to_data_url(image) for image in downloaded]
@@ -145,7 +151,8 @@ class CryptoSpamBot(discord.Client):
             self.settings.confidence_medium,
         )
         if not decision.is_scam:
-            logger.info("Message %s not flagged: %s", message.id, decision.reason)
+            if self.settings.debug_logs:
+                logger.info("Message %s not flagged: %s", message.id, decision.reason)
             return
 
         delete_result = await safe_delete(message)
@@ -171,7 +178,8 @@ class CryptoSpamBot(discord.Client):
             return
 
         if self.settings.action_medium == "delete_only":
-            logger.info("Message %s deleted without report", message.id)
+            if self.settings.debug_logs:
+                logger.info("Message %s deleted without report", message.id)
             return
 
         logger.info("Message %s medium confidence scam, sending report", message.id)
