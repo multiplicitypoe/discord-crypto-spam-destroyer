@@ -1,6 +1,6 @@
 # Discord crypto spam destroyer
 
-This bot helps moderators deal with the “3-4 pictures of twitter or a crypto exchange” crypto scam spam. It checks known bad image hashes first, then (optionally) asks OpenAI to classify new patterns. It’s meant to be fast, cheap, and safe. 
+This bot helps moderators deal with the “3-4 pictures of twitter or a crypto exchange” crypto scam spam. It checks known bad image hashes first, then (optionally) asks OpenAI to classify new patterns. It’s very fast when dealing with known images, and should just cost cents per day if you use the OpenAI API, for a large server. 
 
 ## Why this exists
 
@@ -12,7 +12,7 @@ These scams are repetitive. Hashes catch the repeats quickly and for free. The m
 - Only looks at messages with N or more images (default 3) to reduce noise and cost.
 - Checks a file‑based hash denylist first.
 - Optional OpenAI vision classification for unknown images.
-  - Cost note: with `gpt-4o-mini`, our 512x512-ish scam images are a tiny fraction of a cent each. Check the OpenAI pricing page for current rates.
+  - Cost note: with `gpt-4o-mini`, our 512x512-ish scam images are a tiny fraction of a cent each. 
 - Deletes scams and optionally kicks/bans or just reports.
 - Mod report includes action taken, author roles, and locks buttons after one action.
 - `/add_hash` slash command lets mods upload an image to add its hash.
@@ -41,6 +41,8 @@ cd discord-crypto-spam-destroyer
 ```bash
 DISCORD_TOKEN=...
 OPENAI_API_KEY=...
+MOD_CHANNEL=...
+MOD_ROLE_ID=...
 ```
 
 3) Run:
@@ -76,21 +78,21 @@ If you want hash‑only mode, omit `OPENAI_API_KEY` and set `HASH_ONLY_MODE=true
 Required:
 
 - `DISCORD_TOKEN` — bot token from Discord.
+- `MOD_CHANNEL` — channel id or name for reports.
+- `MOD_ROLE_ID` — restrict mod actions to a role.
 
 Optional (defaults shown):
 
 - `OPENAI_API_KEY` — OpenAI key for vision classification.
 - `OPENAI_MODEL` (gpt-4o-mini) — model for image classification (our sample images are ~512x512, so per‑image cost is very low).
 - `HASH_ONLY_MODE` (false) — skip OpenAI and use hash denylist only.
-- `MIN_IMAGE_COUNT` (3) — min images before analysis.
+- `MIN_IMAGE_COUNT` (3) — min images on a message to trigger the bot. I find that these bots always post >=3 images, tune this lower at the risk of incurring more OpenAI API costs
 - `MAX_IMAGES_TO_ANALYZE` (4) — cap on images per message.
 - `KNOWN_BAD_HASH_PATH` (data/bad_hashes.txt) — denylist storage path.
 - `ACTION_HIGH` (kick) — `kick`, `ban`, or `report_only` for high confidence.
 - `ACTION_MEDIUM` (delete_and_report) — `delete_and_report` or `delete_only`.
 - `CONFIDENCE_HIGH` (0.85) — high confidence cutoff.
 - `CONFIDENCE_MEDIUM` (0.65) — medium confidence cutoff.
-- `MOD_CHANNEL` (channel id or name, default 448522240749993990) — where reports go.
-- `MOD_ROLE_ID` (restrict mod actions to role, default 410676614674907136).
 - `REPORT_HIGH` (true) — also report high‑confidence cases to mods.
 - `DOWNLOAD_TIMEOUT_S` (8.0) — image download timeout.
 - `MAX_IMAGE_BYTES` (5000000) — max image size.

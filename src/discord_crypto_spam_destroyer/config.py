@@ -76,6 +76,9 @@ def load_settings() -> Settings:
 
     mod_role_value = _env_optional("MOD_ROLE_ID")
 
+    if not _env_optional("MOD_CHANNEL"):
+        raise ValueError("MOD_CHANNEL is required")
+
     return Settings(
         discord_token=discord_token,
         openai_api_key=openai_api_key,
@@ -87,8 +90,8 @@ def load_settings() -> Settings:
         action_medium=cast(ActionMedium, action_medium),
         confidence_high=_env_float("CONFIDENCE_HIGH", 0.85),
         confidence_medium=_env_float("CONFIDENCE_MEDIUM", 0.65),
-        mod_channel=_env_optional("MOD_CHANNEL") or "448522240749993990",
-        mod_role_id=int(mod_role_value) if mod_role_value else 410676614674907136,
+        mod_channel=_env_optional("MOD_CHANNEL"),
+        mod_role_id=int(mod_role_value) if mod_role_value else None,
         report_high=_env_bool("REPORT_HIGH", True),
         hash_only_mode=_env_bool("HASH_ONLY_MODE", False),
         download_timeout_s=_env_float("DOWNLOAD_TIMEOUT_S", 8.0),
