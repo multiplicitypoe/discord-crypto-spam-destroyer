@@ -8,7 +8,7 @@ help:
 	@echo "make test-discord   - send a dummy mod report"
 	@echo "make test           - run pytest (via poetry)"
 	@echo "make run-bot        - run the bot with .env"
-	@echo "make run-docker-bot - build and run with Docker"
+	@echo "make run-docker-bot - build and run with Docker (persist data/)"
 
 ensure-poetry:
 	@command -v poetry >/dev/null 2>&1 || (echo "Poetry is required. Install from https://python-poetry.org/docs/#installation" && exit 1)
@@ -33,4 +33,4 @@ run-bot: install
 	bash -c 'set -a && . ./.env && set +a && PYTHONPATH=src poetry run python -m discord_crypto_spam_destroyer.bot'
 
 run-docker-bot:
-	sudo docker build -t discord-crypto-spam-destroyer . && sudo docker run --env-file .env discord-crypto-spam-destroyer
+	sudo docker build -t discord-crypto-spam-destroyer . && sudo docker run --env-file .env -v $(PWD)/data:/app/data discord-crypto-spam-destroyer

@@ -18,6 +18,7 @@ from discord_crypto_spam_destroyer.discord_ui.mod_report import (
     build_mod_files,
     build_report_content,
 )
+from discord_crypto_spam_destroyer.discord_ui.report_store import ReportRecord, ReportStore
 from discord_crypto_spam_destroyer.hashes.phash import compute_phashes
 from discord_crypto_spam_destroyer.hashes.store import FileHashStore, match_hashes
 from discord_crypto_spam_destroyer.moderation.actions import apply_high_action, safe_delete
@@ -40,10 +41,12 @@ class CryptoSpamBot(discord.Client):
         self.hash_store = FileHashStore(Path(settings.known_bad_hash_path))
         self.tree = app_commands.CommandTree(self)
         self._report_cooldown: dict[int, float] = {}
+        self.report_store = ReportStore(Path("data") / "report_store.json")
 
     async def on_ready(self) -> None:
         logger.info("Logged in as %s", self.user)
         await self._register_commands()
+        await self._restore_persistent_views()
 
     async def on_message(self, message: discord.Message) -> None:
         if not message.guild or message.author.bot:
@@ -80,6 +83,7 @@ class CryptoSpamBot(discord.Client):
         if match.matched:
             logger.info("Message %s matched known bad hashes", message.id)
             delete_result = await safe_delete(message)
+            author_roles = await self._format_author_roles(message.guild, message.author)
             action_result = await self._apply_high_action_with_mod_check(
                 message.guild,
                 message.author,
@@ -97,6 +101,9 @@ class CryptoSpamBot(discord.Client):
                     reason_override="Known bad hash match",
                     action_taken=self._format_action_taken(delete_result, action_result),
                     allow_hash_add=False,
+                    kick_disabled=self._should_disable_kick(action_result),
+                    action_suggestion_override="No action necessary",
+                    author_roles_override=author_roles,
                 )
             return
 
@@ -160,6 +167,7 @@ class CryptoSpamBot(discord.Client):
             return
 
         delete_result = await safe_delete(message)
+        author_roles = await self._format_author_roles(message.guild, message.author)
         if decision.confidence_band.value == "high":
             logger.info("Message %s high confidence scam", message.id)
             action_result = await self._apply_high_action_with_mod_check(
@@ -178,6 +186,9 @@ class CryptoSpamBot(discord.Client):
                     phashes,
                     action_taken=self._format_action_taken(delete_result, action_result),
                     allow_hash_add=True,
+                    kick_disabled=self._should_disable_kick(action_result),
+                    action_suggestion_override="Add hashes",
+                    author_roles_override=author_roles,
                 )
             return
 
@@ -196,7 +207,11 @@ class CryptoSpamBot(discord.Client):
                 phashes,
                 action_taken=self._format_action_taken(delete_result, None),
                 allow_hash_add=True,
+                kick_disabled=False,
+                action_suggestion_override="Review and decide",
+                author_roles_override=author_roles,
             )
+
 
     async def _send_report(
         self,
@@ -208,6 +223,9 @@ class CryptoSpamBot(discord.Client):
         reason_override: str | None = None,
         action_taken: str = "none",
         allow_hash_add: bool = True,
+        kick_disabled: bool = False,
+        action_suggestion_override: str | None = None,
+        author_roles_override: str | None = None,
     ) -> None:
         if message.guild is None:
             return
@@ -226,10 +244,10 @@ class CryptoSpamBot(discord.Client):
             indicators = "none"
             confidence = 1.0
             reasons = [reason_override or "Known bad hash"]
-        action_suggestion = (
+        action_suggestion = action_suggestion_override or (
             f"/kick {author.id}" if self.settings.action_high == "kick" else f"/ban {author.id}"
         )
-        author_roles = await self._format_author_roles(message.guild, author)
+        author_roles = author_roles_override or await self._format_author_roles(message.guild, author)
         content = build_report_content(
             message,
             author,
@@ -251,11 +269,26 @@ class CryptoSpamBot(discord.Client):
             all_hashes=list(all_hashes),
             mod_role_id=self.settings.mod_role_id,
             allow_hash_add=allow_hash_add,
-            kick_disabled=self.settings.action_high != "kick",
+            kick_disabled=kick_disabled,
+            report_store=self.report_store,
+            report_record=None,
         )
-        view = ReportView(context)
+        view = ReportView(context, timeout=None)
         files = build_mod_files(downloaded)
-        await channel.send(content=content, files=files, view=view)
+        sent_message = await channel.send(content=content, files=files, view=view)
+        report_record = ReportRecord(
+            message_id=sent_message.id,
+            channel_id=channel.id,
+            guild_id=message.guild.id,
+            author_id=author.id,
+            mod_role_id=self.settings.mod_role_id,
+            allow_hash_add=allow_hash_add,
+            kick_disabled=kick_disabled,
+            all_hashes=list(all_hashes),
+            created_at=time.time(),
+        )
+        self.report_store.save_report(report_record)
+        context.report_record = report_record
 
     async def _register_commands(self) -> None:
         if not self.settings.mod_channel:
@@ -343,6 +376,9 @@ class CryptoSpamBot(discord.Client):
             actions.append(action_result)
         return ", ".join(actions)
 
+    def _should_disable_kick(self, action_result: str | None) -> bool:
+        return action_result in {"kick", "ban", "softban"}
+
     def _report_allowed(self, user_id: int) -> bool:
         cooldown = self.settings.report_cooldown_s
         if cooldown <= 0:
@@ -362,6 +398,60 @@ class CryptoSpamBot(discord.Client):
             return await guild.fetch_member(user_id)
         except (discord.NotFound, discord.Forbidden, discord.HTTPException):
             return None
+
+    async def _fetch_channel(self, channel_id: int) -> discord.TextChannel | None:
+        channel = self.get_channel(channel_id)
+        if isinstance(channel, discord.TextChannel):
+            return channel
+        try:
+            fetched = await self.fetch_channel(channel_id)
+        except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+            return None
+        return fetched if isinstance(fetched, discord.TextChannel) else None
+
+    async def _restore_persistent_views(self) -> None:
+        ttl_s = self.settings.report_store_ttl_hours * 3600
+        self.report_store.prune(ttl_s)
+        records = self.report_store.load_reports()
+        restored = 0
+        for record in records:
+            channel = await self._fetch_channel(record.channel_id)
+            if not channel:
+                self.report_store.delete_report(record.message_id)
+                continue
+            try:
+                report_message = await channel.fetch_message(record.message_id)
+            except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+                self.report_store.delete_report(record.message_id)
+                continue
+            author: discord.abc.User | None = None
+            try:
+                author = await self.fetch_user(record.author_id)
+            except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+                author = channel.guild.get_member(record.author_id)
+            if author is None:
+                self.report_store.delete_report(record.message_id)
+                continue
+            context = ReportContext(
+                guild=channel.guild,
+                channel=channel,
+                message=report_message,
+                author=author,
+                images=[],
+                action_high=self.settings.action_high,
+                hash_store=self.hash_store,
+                all_hashes=list(record.all_hashes),
+                mod_role_id=record.mod_role_id,
+                allow_hash_add=record.allow_hash_add,
+                kick_disabled=record.kick_disabled,
+                report_store=self.report_store,
+                report_record=record,
+            )
+            view = ReportView(context, timeout=None)
+            self.add_view(view, message_id=record.message_id)
+            restored += 1
+        if restored:
+            logger.info("Restored %s report views", restored)
 
     async def _format_author_roles(self, guild: discord.Guild, author: discord.abc.User) -> str:
         member = await self._get_member(guild, author.id)

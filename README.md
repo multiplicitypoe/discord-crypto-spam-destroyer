@@ -108,7 +108,7 @@ Optional (defaults shown):
 - `CONFIDENCE_MEDIUM` (0.65) - medium confidence cutoff.
 - `REPORT_HIGH` (true) - also report high-confidence cases to mods.
 - `REPORT_COOLDOWN_S` (20) - suppress duplicate reports per user during bursts.
-- `SOFTBAN_DELETE_DAYS` (1) - how many days of messages to delete for softban.
+- `REPORT_STORE_TTL_HOURS` (24) - keep report buttons alive across restarts for this many hours.
 - `DEBUG_LOGS` (false) - verbose per-message logging for troubleshooting.
 - `DOWNLOAD_TIMEOUT_S` (8.0) - image download timeout.
 - `MAX_IMAGE_BYTES` (5000000) - max image size.
@@ -123,7 +123,7 @@ Optional (defaults shown):
 # Make sure you created the .env file
 
 docker build -t discord-crypto-spam-destroyer .
-docker run --env-file .env discord-crypto-spam-destroyer
+docker run --env-file .env -v "$(pwd)/data:/app/data" discord-crypto-spam-destroyer
 ```
 
 ## Running with Poetry
