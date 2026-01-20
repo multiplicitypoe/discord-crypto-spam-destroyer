@@ -56,21 +56,6 @@ class CryptoSpamBot(discord.Client):
                 len(message.attachments),
                 len(attachments),
             )
-        selection = select_images(
-            [a.url for a in attachments],
-            self.settings.min_image_count,
-            self.settings.max_images_to_analyze,
-        )
-        if not selection.qualifies:
-            if self.settings.debug_logs:
-                logger.info(
-                    "Message %s skipped: need %s images, got %s",
-                    message.id,
-                    self.settings.min_image_count,
-                    selection.total_images,
-                )
-            return
-
         downloaded: list[DownloadedImage] = []
         for attachment in attachments[: self.settings.max_images_to_analyze]:
             downloaded_image = await read_attachment(
@@ -114,6 +99,21 @@ class CryptoSpamBot(discord.Client):
         if not phashes:
             if self.settings.debug_logs:
                 logger.info("Message %s skipped: no valid hashes", message.id)
+            return
+
+        selection = select_images(
+            [a.url for a in attachments],
+            self.settings.min_image_count,
+            self.settings.max_images_to_analyze,
+        )
+        if not selection.qualifies:
+            if self.settings.debug_logs:
+                logger.info(
+                    "Message %s skipped: need %s images, got %s",
+                    message.id,
+                    self.settings.min_image_count,
+                    selection.total_images,
+                )
             return
 
         if self.settings.hash_only_mode:
