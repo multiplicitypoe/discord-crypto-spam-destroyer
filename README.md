@@ -1,19 +1,19 @@
-# Discord crypto spam destroyer
+# Discord Crypto Spam Destroyer
 
-This bot helps moderators deal with the “3-4 pictures of twitter or a crypto exchange” crypto scam spam. It checks known bad image hashes first, then (optionally) asks OpenAI to classify new patterns. It’s very fast when dealing with known images, and should just cost cents per day if you use the OpenAI API, for a large server. 
+This bot helps mods deal with the “3-4 pictures of twitter or a crypto exchange” crypto scam spam. It checks known bad image hashes first, then (optionally) asks OpenAI to classify new patterns. It’s very fast when dealing with known images, and should just cost cents per day if you use the OpenAI API, for a large server. 
 
 ## Why this exists
 
-These scams are repetitive. Hashes catch the repeats quickly and for free. The model step is there for new variants, but you can turn it off if you want a hash‑only setup.
+These scams are repetitive, but hard to catch with the native Discord Automoderator, now that they stopped sending links to images, but rather direct uploads. Hashes catch the repeats quickly and for free. The model step is there for new variants, but you can turn it off if you want a hash‑only setup and don't mind some handholding. 
 
 ## What it does
 
-- Watches guild text channels (ignores DMs).
+- Watches guild text channels
 - Only looks at messages with N or more images (default 3) to reduce noise and cost.
 - Checks a file‑based hash denylist first.
 - Optional OpenAI vision classification for unknown images.
   - Cost note: with `gpt-4o-mini`, our 512x512-ish scam images are a tiny fraction of a cent each. 
-- Deletes scams and optionally kicks/bans or just reports.
+- Deletes scams and optionally kicks/bans or just reports to a configured mod channel. (See below for images)
 - Mod report includes action taken, author roles, and locks buttons after one action.
 - `/add_hash` slash command lets mods upload an image to add its hash.
 
