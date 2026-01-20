@@ -1,0 +1,32 @@
+[tool.poetry]
+name = "discord-crypto-spam-destroyer"
+version = "0.1.0"
+description = "Discord moderation bot for crypto scam image spam"
+authors = ["OpenCode"]
+readme = "README.md"
+packages = [{ include = "discord_crypto_spam_destroyer", from = "src" }]
+
+[tool.poetry.dependencies]
+python = ">=3.10,<4.0"
+discord-py = "2.4.0"
+openai = "1.58.1"
+pillow = "10.4.0"
+imagehash = "4.3.1"
+httpx = "0.27.2"
+pydantic = "2.8.2"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "8.3.2"
+pytest-asyncio = "0.23.8"
+ruff = "0.6.5"
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+asyncio_mode = "auto"
+
+[tool.ruff]
+line-length = 100
+
+[build-system]
+requires = ["poetry-core>=1.9.0"]
+build-backend = "poetry.core.masonry.api"
