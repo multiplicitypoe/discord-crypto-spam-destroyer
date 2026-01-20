@@ -87,6 +87,7 @@ class CryptoSpamBot(discord.Client):
                 reason="Known bad crypto scam hash",
             )
             if self._report_allowed(message.author.id):
+                logger.info("Report sent (hash match) for message %s", message.id)
                 await self._send_report(
                     message,
                     message.author,
@@ -168,7 +169,7 @@ class CryptoSpamBot(discord.Client):
                 reason="High confidence crypto scam",
             )
             if self.settings.report_high and self._report_allowed(message.author.id):
-                logger.info("Message %s reporting high confidence scam", message.id)
+                logger.info("Report sent (high confidence) for message %s", message.id)
                 await self._send_report(
                     message,
                     message.author,
@@ -186,7 +187,7 @@ class CryptoSpamBot(discord.Client):
             return
 
         if self._report_allowed(message.author.id):
-            logger.info("Message %s medium confidence scam, sending report", message.id)
+            logger.info("Report sent (medium confidence) for message %s", message.id)
             await self._send_report(
                 message,
                 message.author,
@@ -321,7 +322,13 @@ class CryptoSpamBot(discord.Client):
             member = await self._get_member(guild, author.id)
             if member and any(role.id == self.settings.mod_role_id for role in member.roles):
                 return "no kick (author is Mod)"
-        success = await apply_high_action(guild, author.id, self.settings.action_high, reason)
+        success = await apply_high_action(
+            guild,
+            author.id,
+            self.settings.action_high,
+            reason,
+            softban_delete_days=self.settings.softban_delete_days,
+        )
         if not success:
             return "kick failed"
         if self.settings.action_high == "softban":

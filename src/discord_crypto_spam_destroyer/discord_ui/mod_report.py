@@ -3,12 +3,15 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Iterable
 
+import logging
 import discord
 
 from discord_crypto_spam_destroyer.config import ActionHigh
 from discord_crypto_spam_destroyer.hashes.store import FileHashStore
 from discord_crypto_spam_destroyer.moderation.actions import apply_high_action
 from discord_crypto_spam_destroyer.utils.image import DownloadedImage, build_discord_files
+
+logger = logging.getLogger("discord_crypto_spam_destroyer")
 
 
 @dataclass(frozen=True)
@@ -81,6 +84,7 @@ class ReportView(discord.ui.View):
         if self.context.kick_disabled:
             await self._finalize_action(interaction, "Kick disabled for auto-actions")
             return
+        logger.info("Mod action: kick pressed by %s", interaction.user)
         success = await apply_high_action(
             self.context.guild,
             self.context.author.id,
@@ -98,6 +102,7 @@ class ReportView(discord.ui.View):
     ) -> None:
         if not await self._ensure_permissions(interaction, "ban"):
             return
+        logger.info("Mod action: ban pressed by %s", interaction.user)
         success = await apply_high_action(
             self.context.guild,
             self.context.author.id,
@@ -113,6 +118,7 @@ class ReportView(discord.ui.View):
         interaction: discord.Interaction,
         button: discord.ui.Button,
     ) -> None:
+        logger.info("Mod action: ignore pressed by %s", interaction.user)
         await self._finalize_action(interaction, "Ignored")
 
     @discord.ui.button(label="Add Hashes", style=discord.ButtonStyle.primary)
@@ -124,12 +130,14 @@ class ReportView(discord.ui.View):
         if not await self._ensure_permissions(interaction, "kick"):
             return
         if not self.context.allow_hash_add:
+            logger.info("Mod action: add hashes pressed by %s (no-op)", interaction.user)
             await self._finalize_action(interaction, "Hashes already known")
             return
         added = 0
         for phash in self.context.all_hashes:
             self.context.hash_store.add(phash)
             added += 1
+        logger.info("Mod action: add hashes pressed by %s (%s added)", interaction.user, added)
         await self._finalize_action(interaction, f"Added {added} hashes")
 
 

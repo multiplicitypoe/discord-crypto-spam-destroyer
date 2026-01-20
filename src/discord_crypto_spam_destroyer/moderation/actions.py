@@ -58,11 +58,12 @@ async def apply_high_action(
     user_id: int,
     action: ActionHigh,
     reason: str,
+    softban_delete_days: int = 1,
 ) -> bool:
     if action == "report_only":
         return True
     if action == "softban":
-        if not await safe_ban(guild, user_id, reason, delete_days=1):
+        if not await safe_ban(guild, user_id, reason, delete_days=softban_delete_days):
             return False
         return await safe_unban(guild, user_id, reason)
     if action == "ban":

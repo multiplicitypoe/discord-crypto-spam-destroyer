@@ -11,7 +11,7 @@ help:
 	@echo "make run-docker-bot - build and run with Docker"
 
 ensure-poetry:
-	@command -v poetry >/dev/null 2>&1 || python3 -m pip install --user poetry==1.8.5
+	@command -v poetry >/dev/null 2>&1 || (echo "Poetry is required. Install from https://python-poetry.org/docs/#installation" && exit 1)
 
 install: ensure-poetry
 	poetry install

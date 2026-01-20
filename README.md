@@ -102,12 +102,13 @@ Optional (defaults shown):
 - `MIN_IMAGE_COUNT` (3) - min images required before OpenAI is called. Hash checks still run on any message with images.
 - `MAX_IMAGES_TO_ANALYZE` (4) - cap on images analyzed per message.
 - `KNOWN_BAD_HASH_PATH` (data/bad_hashes.txt) - denylist storage path.
-- `ACTION_HIGH` (kick) - `kick`, `ban`, `softban` (ban+unban, deletes recent messages), or `report_only` for high confidence.
+- `ACTION_HIGH` (softban) - `kick`, `ban`, `softban` (ban+unban, deletes recent messages), or `report_only` for high confidence.
 - `ACTION_MEDIUM` (delete_and_report) - `delete_and_report` or `delete_only`.
 - `CONFIDENCE_HIGH` (0.85) - high confidence cutoff.
 - `CONFIDENCE_MEDIUM` (0.65) - medium confidence cutoff.
 - `REPORT_HIGH` (true) - also report high-confidence cases to mods.
 - `REPORT_COOLDOWN_S` (20) - suppress duplicate reports per user during bursts.
+- `SOFTBAN_DELETE_DAYS` (1) - how many days of messages to delete for softban.
 - `DEBUG_LOGS` (false) - verbose per-message logging for troubleshooting.
 - `DOWNLOAD_TIMEOUT_S` (8.0) - image download timeout.
 - `MAX_IMAGE_BYTES` (5000000) - max image size.

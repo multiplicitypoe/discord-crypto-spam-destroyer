@@ -24,6 +24,7 @@ class Settings:
     mod_role_id: int | None
     report_high: bool
     report_cooldown_s: float
+    softban_delete_days: int
     hash_only_mode: bool
     debug_logs: bool
     download_timeout_s: float
@@ -68,7 +69,7 @@ def load_settings() -> Settings:
     if not discord_token:
         raise ValueError("DISCORD_TOKEN is required")
 
-    action_high = _env("ACTION_HIGH", "kick")
+    action_high = _env("ACTION_HIGH", "softban")
     if action_high not in {"kick", "ban", "softban", "report_only"}:
         raise ValueError("ACTION_HIGH must be 'kick', 'ban', 'softban', or 'report_only'")
 
@@ -96,6 +97,7 @@ def load_settings() -> Settings:
         mod_role_id=int(mod_role_value) if mod_role_value else None,
         report_high=_env_bool("REPORT_HIGH", True),
         report_cooldown_s=_env_float("REPORT_COOLDOWN_S", 20.0),
+        softban_delete_days=_env_int("SOFTBAN_DELETE_DAYS", 1),
         hash_only_mode=_env_bool("HASH_ONLY_MODE", False),
         debug_logs=_env_bool("DEBUG_LOGS", False),
         download_timeout_s=_env_float("DOWNLOAD_TIMEOUT_S", 8.0),
