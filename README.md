@@ -112,6 +112,7 @@ Optional (defaults shown):
 - `DEBUG_LOGS` (false) - verbose per-message logging for troubleshooting.
 - `DOWNLOAD_TIMEOUT_S` (8.0) - image download timeout.
 - `MAX_IMAGE_BYTES` (5000000) - max image size.
+- `TZ` (America/Los_Angeles) - optional container timezone override so that your logs are readable
 
 ## Slash command
 

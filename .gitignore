@@ -5,3 +5,4 @@ __pycache__/
 *.egg-info/
 *.pyc
 build/
+data/report_store.json
