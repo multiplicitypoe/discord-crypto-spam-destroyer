@@ -8,11 +8,19 @@ from pathlib import Path
 import discord
 
 try:
-    from discord_crypto_spam_destroyer.discord_ui.mod_report import ReportContext, ReportView
+    from discord_crypto_spam_destroyer.discord_ui.mod_report import (
+        ReportContext,
+        ReportView,
+        build_report_embed,
+    )
     from discord_crypto_spam_destroyer.hashes.store import FileHashStore
 except ModuleNotFoundError:
     sys.path.append(str(Path("src").resolve()))
-    from discord_crypto_spam_destroyer.discord_ui.mod_report import ReportContext, ReportView
+    from discord_crypto_spam_destroyer.discord_ui.mod_report import (
+        ReportContext,
+        ReportView,
+        build_report_embed,
+    )
     from discord_crypto_spam_destroyer.hashes.store import FileHashStore
 
 MOD_CHANNEL_ENV = "MOD_CHANNEL"
@@ -23,6 +31,11 @@ class TargetInfo:
     guild: discord.Guild
     channel: discord.TextChannel
     author: discord.abc.User
+
+
+class NoopReportStore:
+    def delete_report(self, message_id: int) -> None:
+        return
 
 
 class TestReportBot(discord.Client):
@@ -53,22 +66,25 @@ class TestReportBot(discord.Client):
             message=last_message,
             author=target.author,
             images=[],
-            action_high="kick",
             hash_store=FileHashStore(Path("data") / "bad_hashes.txt"),
             all_hashes=[],
             mod_role_id=mod_role_id,
             allow_hash_add=True,
+            kick_disabled=False,
+            report_store=NoopReportStore(),
+            report_record=None,
         )
 
-        embed = discord.Embed(
-            title="Test crypto scam report",
-            description="This is a test report with mod action buttons.",
-            color=discord.Color.orange(),
+        embed = build_report_embed(
+            last_message,
+            target.author,
+            confidence=0.75,
+            reasons=["Test report"],
+            indicators="none",
+            action_suggestion="/kick USER_ID",
+            action_taken="none",
+            author_roles="(test roles)",
         )
-        embed.add_field(name="Author", value=f"{target.author.mention} ({target.author.id})")
-        embed.add_field(name="Channel", value=target.channel.mention)
-        embed.add_field(name="Confidence", value="0.75")
-        embed.add_field(name="Suggested", value="`/kick USER_ID`")
 
         view = ReportView(context)
         await target.channel.send(embed=embed, view=view)

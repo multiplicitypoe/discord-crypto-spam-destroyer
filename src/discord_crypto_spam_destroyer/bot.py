@@ -16,7 +16,7 @@ from discord_crypto_spam_destroyer.discord_ui.mod_report import (
     ReportView,
     build_indicator_text,
     build_mod_files,
-    build_report_content,
+    build_report_embed,
 )
 from discord_crypto_spam_destroyer.discord_ui.report_store import ReportRecord, ReportStore
 from discord_crypto_spam_destroyer.hashes.phash import compute_phashes
@@ -248,7 +248,7 @@ class CryptoSpamBot(discord.Client):
             f"/kick {author.id}" if self.settings.action_high == "kick" else f"/ban {author.id}"
         )
         author_roles = author_roles_override or await self._format_author_roles(message.guild, author)
-        content = build_report_content(
+        embed = build_report_embed(
             message,
             author,
             confidence,
@@ -264,7 +264,6 @@ class CryptoSpamBot(discord.Client):
             message=message,
             author=author,
             images=downloaded,
-            action_high=self.settings.action_high,
             hash_store=self.hash_store,
             all_hashes=list(all_hashes),
             mod_role_id=self.settings.mod_role_id,
@@ -275,7 +274,7 @@ class CryptoSpamBot(discord.Client):
         )
         view = ReportView(context, timeout=None)
         files = build_mod_files(downloaded)
-        sent_message = await channel.send(content=content, files=files, view=view)
+        sent_message = await channel.send(embed=embed, files=files, view=view)
         report_record = ReportRecord(
             message_id=sent_message.id,
             channel_id=channel.id,
@@ -438,7 +437,6 @@ class CryptoSpamBot(discord.Client):
                 message=report_message,
                 author=author,
                 images=[],
-                action_high=self.settings.action_high,
                 hash_store=self.hash_store,
                 all_hashes=list(record.all_hashes),
                 mod_role_id=record.mod_role_id,

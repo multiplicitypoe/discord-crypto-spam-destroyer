@@ -6,7 +6,6 @@ from typing import Iterable
 import logging
 import discord
 
-from discord_crypto_spam_destroyer.config import ActionHigh
 from discord_crypto_spam_destroyer.hashes.store import FileHashStore
 from discord_crypto_spam_destroyer.moderation.actions import apply_high_action
 from discord_crypto_spam_destroyer.utils.image import DownloadedImage, build_discord_files
@@ -22,7 +21,6 @@ class ReportContext:
     message: discord.Message
     author: discord.abc.User
     images: Iterable[DownloadedImage]
-    action_high: ActionHigh
     hash_store: FileHashStore
     all_hashes: list[str]
     mod_role_id: int | None
@@ -70,15 +68,34 @@ class ReportView(discord.ui.View):
         for child in self.children:
             if isinstance(child, discord.ui.Button):
                 child.disabled = True
-        content = interaction.message.content if interaction.message else ""
         actor = interaction.user.mention if interaction.user else "Unknown"
-        updated = f"{content}\n\nAction by {actor}: {result}" if content else f"Action by {actor}: {result}"
+        action_text = f"Action by {actor}: {result}"
         if self.context.report_record:
             self.context.report_store.delete_report(self.context.report_record.message_id)
+        if interaction.message and interaction.message.embeds:
+            embed = interaction.message.embeds[0]
+            updated = False
+            for index, field in enumerate(embed.fields):
+                field_name = field.name or ""
+                if field_name.lower() == "action taken":
+                    embed.set_field_at(index, name=field_name, value=action_text, inline=field.inline)
+                    updated = True
+                    break
+            if not updated:
+                embed.add_field(name="Action taken", value=action_text, inline=False)
+            if interaction.response.is_done():
+                await interaction.edit_original_response(embed=embed, view=self)
+            else:
+                await interaction.response.edit_message(embed=embed, view=self)
+            return
+        content = interaction.message.content if interaction.message else ""
+        updated_content = (
+            f"{content}\n\n{action_text}" if content else action_text
+        )
         if interaction.response.is_done():
-            await interaction.edit_original_response(content=updated, view=self)
+            await interaction.edit_original_response(content=updated_content, view=self)
         else:
-            await interaction.response.edit_message(content=updated, view=self)
+            await interaction.response.edit_message(content=updated_content, view=self)
 
     @discord.ui.button(label="Kick", style=discord.ButtonStyle.danger, custom_id="report_kick")
     async def kick_button(
@@ -173,7 +190,7 @@ class ReportView(discord.ui.View):
         await self._finalize_action(interaction, result)
 
 
-def build_report_content(
+def build_report_embed(
     message: discord.Message,
     author: discord.abc.User,
     confidence: float,
@@ -182,18 +199,26 @@ def build_report_content(
     action_suggestion: str,
     action_taken: str,
     author_roles: str,
-) -> str:
+) -> discord.Embed:
     reason_text = ", ".join(reasons) if reasons else "none"
-    return (
-        f"**Possible crypto scam**\n"
-        f"Author: {author.mention} ({author.id}) {author_roles}\n"
-        f"Message: {message.jump_url}\n"
-        f"Confidence: {confidence:.2f}\n"
-        f"Reasons: {reason_text}\n"
-        f"Indicators: {indicators}\n"
-        f"Action taken: {action_taken}\n"
-        f"Suggested: `{action_suggestion}`"
+    suggested = f"`{action_suggestion}`" if action_suggestion.startswith("/") else action_suggestion
+    embed = discord.Embed(title="Possible crypto scam", color=discord.Color.red())
+    embed.add_field(
+        name="Author",
+        value=f"{author.mention} ({author.id}) {author_roles}",
+        inline=False,
     )
+    embed.add_field(
+        name="Message",
+        value=f"[Jump to message]({message.jump_url})",
+        inline=False,
+    )
+    embed.add_field(name="Confidence", value=f"{confidence:.2f}", inline=True)
+    embed.add_field(name="Reasons", value=reason_text, inline=False)
+    embed.add_field(name="Indicators", value=indicators, inline=False)
+    embed.add_field(name="Action taken", value=action_taken, inline=False)
+    embed.add_field(name="Suggested", value=suggested, inline=False)
+    return embed
 
 
 def build_indicator_text(domains: Iterable[str], amounts: Iterable[str], wallets: Iterable[str]) -> str:
