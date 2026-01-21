@@ -29,9 +29,10 @@ class FileHashStore(HashStore):
         existing = self.load()
         if phash in existing:
             return
+        existing.add(phash)
+        sorted_hashes = sorted(existing)
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        with self.path.open("a", encoding="utf-8") as handle:
-            handle.write(f"{phash}\n")
+        self.path.write_text("\n".join(sorted_hashes) + "\n", encoding="utf-8")
 
 
 def match_hashes(candidates: Iterable[str], known_bad: set[str]) -> HashMatch:

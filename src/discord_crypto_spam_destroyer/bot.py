@@ -312,6 +312,13 @@ class CryptoSpamBot(discord.Client):
             if not any(role.id == self.settings.mod_role_id for role in interaction.user.roles):
                 await interaction.response.send_message("Missing Mod role.", ephemeral=True)
                 return
+        if not interaction.guild:
+            await interaction.response.send_message("This command can only be used in a server.", ephemeral=True)
+            return
+        mod_channel = await self._resolve_mod_channel(interaction.guild)
+        if not mod_channel:
+            await interaction.response.send_message("Mod channel not found.", ephemeral=True)
+            return
         downloaded = await read_attachment(image, self.settings.max_image_bytes, self.settings.download_timeout_s)
         if not downloaded:
             await interaction.response.send_message("Failed to read image.", ephemeral=True)
@@ -320,11 +327,45 @@ class CryptoSpamBot(discord.Client):
         if not phashes:
             await interaction.response.send_message("No hash generated from image.", ephemeral=True)
             return
-        added = 0
+        unique_hashes: list[str] = []
+        seen: set[str] = set()
         for phash in phashes:
+            if phash in seen:
+                continue
+            unique_hashes.append(phash)
+            seen.add(phash)
+        existing = self.hash_store.load()
+        new_hashes = [phash for phash in unique_hashes if phash not in existing]
+        already_known = [phash for phash in unique_hashes if phash in existing]
+        for phash in new_hashes:
             self.hash_store.add(phash)
-            added += 1
-        await interaction.response.send_message(f"Added {added} hash(es) to denylist.", ephemeral=True)
+        added = len(new_hashes)
+        already_count = len(already_known)
+        added_label = "hash" if added == 1 else "hashes"
+        if added == 0:
+            result_detail = f"Hashes already known ({already_count})."
+        elif already_count:
+            result_detail = f"Added {added} {added_label} ({already_count} already known)."
+        else:
+            result_detail = f"Added {added} {added_label}."
+        actor = interaction.user.mention if interaction.user else "Unknown"
+        actor_id = interaction.user.id if interaction.user else "unknown"
+        channel = interaction.channel
+        if isinstance(channel, discord.abc.GuildChannel):
+            source_channel = channel.mention
+        else:
+            source_channel = "Unknown channel"
+        embed = discord.Embed(title="Manual hash add", color=discord.Color.red())
+        embed.add_field(name="Added by", value=f"{actor} ({actor_id})", inline=False)
+        embed.add_field(name="Source", value=source_channel, inline=False)
+        embed.add_field(name="Image", value=f"{image.filename}\n{image.url}", inline=False)
+        embed.add_field(name="Hashes", value=", ".join(unique_hashes), inline=False)
+        embed.add_field(name="Result", value=result_detail, inline=False)
+        embed.set_image(url=image.url)
+        await mod_channel.send(embed=embed)
+        await interaction.response.send_message(
+            f"{result_detail} Logged to {mod_channel.mention}.",
+        )
 
     async def _resolve_mod_channel(self, guild: discord.Guild) -> discord.TextChannel | None:
         if not self.settings.mod_channel:
