@@ -78,7 +78,9 @@ class ReportView(discord.ui.View):
             for index, field in enumerate(embed.fields):
                 field_name = field.name or ""
                 if field_name.lower() == "action taken":
-                    embed.set_field_at(index, name=field_name, value=action_text, inline=field.inline)
+                    prior = field.value or "none"
+                    combined = f"{prior}, {action_text}" if prior and prior.lower() != "none" else action_text
+                    embed.set_field_at(index, name=field_name, value=combined, inline=field.inline)
                     updated = True
                     break
             if not updated:
@@ -216,8 +218,8 @@ def build_report_embed(
     embed.add_field(name="Confidence", value=f"{confidence:.2f}", inline=True)
     embed.add_field(name="Reasons", value=reason_text, inline=False)
     embed.add_field(name="Indicators", value=indicators, inline=False)
-    embed.add_field(name="Action taken", value=action_taken, inline=False)
     embed.add_field(name="Suggested", value=suggested, inline=False)
+    embed.add_field(name="Action taken", value=action_taken, inline=False)
     return embed
 
 

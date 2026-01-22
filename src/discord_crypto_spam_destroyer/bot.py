@@ -387,8 +387,6 @@ class CryptoSpamBot(discord.Client):
         confidence: float,
         reason: str,
     ) -> str:
-        if confidence < 0.95:
-            return "no action (below 0.95)"
         if self.settings.action_high == "report_only":
             return "report only"
         if self.settings.mod_role_id:

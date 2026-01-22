@@ -18,13 +18,13 @@ These scams are repetitive, but hard to catch with the native Discord Automodera
 
 ## Screenshots
 
-Known-bad hash match (auto delete + report):
-
-![Bot report for a known hash match](data/screenshots/example_twitter_known_hashes.png "Known hash report with actions")
-
 OpenAI vision detection (model-flagged scam):
 
 ![Bot report for OpenAI detection](data/screenshots/withembed.webp "OpenAI vision scam report")
+
+Known-bad hash match (auto delete + report):
+
+![Bot report for a known hash match](data/screenshots/example_twitter_known_hashes.png "Known hash report with actions")
 
 ## Quick start (Linux, macOS, WSL)
 
