@@ -31,7 +31,7 @@ Known-bad hash match (auto delete + report):
 1) Clone the repo:
 
 ```bash
-git clone <your-repo-url>
+git clone https://github.com/multiplicitypoe/discord-crypto-spam-destroyer.git
 cd discord-crypto-spam-destroyer
 ```
 
@@ -76,7 +76,7 @@ OpenAI API key (optional if using hash-only mode):
 
 Do not forget to copy your mod channel ID and mod role ID (right-click the channel or role -> Copy ID).
 
-If you want hash-only mode, omit `OPENAI_API_KEY` and set `HASH_ONLY_MODE=true`.
+If you want hash-only mode (no AI image detection, just a fixed set of known bad images you can edit), omit `OPENAI_API_KEY` and set `HASH_ONLY_MODE=true`.
 
 ## Install and invite the bot
 
