@@ -116,7 +116,9 @@ Optional (defaults shown):
 
 ## Slash command
 
-`/add_hash` - Upload an image to add its perceptual hash to the denylist. Use this when you spot a scam image before the model does.
+`/add_hash` - Upload an image to add its perceptual hash to the denylist. Use this when you spot a scam image before the model does. 
+* Hashes are saved via this Slash command and the Report embed button to the bad_hashes.txt file in your clone of this repository, assuming you start the bot with either the docker or non-docker Makefile targets. 
+* If you want to dump images you know are scams and add their hashes all at once (it will preserve ones added through Discord), drop the images in the data/known_bad_scam_images folder and run `make hashes`
 
 ## Running with Docker
 
