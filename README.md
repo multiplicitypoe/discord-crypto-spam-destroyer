@@ -24,7 +24,7 @@ Known-bad hash match (auto delete + report):
 
 OpenAI vision detection (model-flagged scam):
 
-![Bot report for OpenAI detection](data/screenshots/example_crypto_openai_detected.png "OpenAI vision scam report")
+![Bot report for OpenAI detection](data/screenshots/withembed.webp "OpenAI vision scam report")
 
 ## Quick start (Linux, macOS, WSL)
 
