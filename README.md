@@ -10,11 +10,11 @@ These scams are repetitive, but hard to catch with the native Discord Automodera
 
 - Watches channels in your server
 - Checks every message with at least one image against the hash denylist. 
-- Deletes scams and optionally kicks, bans, softbans (ban+unban), or just reports to a configured mod channel
-- Only calls OpenAI if the message has N or more images (default 3) to keep costs down.
+- Deletes scams and optionally kicks, bans, softbans (ban+unban) based on your config, or just reports to a configured mod channel
 - Optional OpenAI vision classification for unknown images.
+- Only calls OpenAI if the message has N or more images (default 3) to keep costs down.
   - Cost note: with `gpt-4o-mini`, our 512x512-ish scam images are a tiny fraction of a cent each. Switch to gpt-4.1-mini to cut costs by 50%
-- `/add_hash` slash command lets mods upload an image to add its hash.
+- `/add_hash` slash command lets mods upload an image to add its hash to the auto-delete/kick list.
 
 ## Screenshots
 
@@ -124,7 +124,7 @@ Optional (defaults shown):
 
 ```bash
 # Make sure you created the .env file
-
+# `make run-docker-bot` Does the below commands in one step (with sudo)
 docker build -t discord-crypto-spam-destroyer .
 docker run --env-file .env -v "$(pwd)/data:/app/data" discord-crypto-spam-destroyer
 ```
