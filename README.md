@@ -1,6 +1,6 @@
 # Discord Crypto Scam Bot Destroyer
 
-This bot helps mods deal with the “3-4 pictures of twitter or a crypto exchange” crypto scam spam. It checks known bad image hashes first, then (optionally) asks OpenAI to classify new patterns. It’s very fast when dealing with known images, and should just cost cents per day if you use the OpenAI API, for a large server. 
+This bot helps mods deal with the “3-4 pictures of twitter or a crypto exchange” crypto scam spam. It checks known bad image hashes first, then (optionally) asks OpenAI to classify new patterns. It’s very fast when dealing with known images, and should just cost cents per day if you use the OpenAI API, for a very large server. 
 
 ## What is this for?
 
@@ -82,9 +82,11 @@ If you want hash-only mode (no AI image detection, just a fixed set of known bad
 
 1) In the Discord Developer Portal, enable **Message Content Intent**.
 2) Invite the bot with these permissions:
-   - Read Messages
+   - Read Messages, Send Messages
+   - Attach Files / Allow Embeds
    - Manage Messages
    - Kick Members / Ban Members (only if you want auto-actions)
+3) Ensure it has those read/attach/send permissions inside the Mod channel you specified in .env
 
 ## Environment variables
 
