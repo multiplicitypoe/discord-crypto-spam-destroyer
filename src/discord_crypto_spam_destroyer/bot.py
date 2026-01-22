@@ -53,6 +53,36 @@ class CryptoSpamBot(discord.Client):
             return
 
         attachments = [a for a in message.attachments if is_image_attachment(a)]
+        if not attachments:
+            return
+
+        if self.settings.message_processing_delay_s > 0:
+            await asyncio.sleep(self.settings.message_processing_delay_s)
+            try:
+                message = await message.channel.fetch_message(message.id)
+            except discord.NotFound:
+                logger.info("Message %s was deleted before processing", message.id)
+                return
+            except discord.Forbidden:
+                logger.info("Message %s became inaccessible before processing", message.id)
+                return
+            except discord.HTTPException:
+                logger.exception("Message %s could not be fetched before processing", message.id)
+                return
+
+            if message.guild is None:
+                logger.info("Message %s missing guild after delay", message.id)
+                return
+
+            attachments = [a for a in message.attachments if is_image_attachment(a)]
+            if not attachments:
+                return
+
+        if message.guild is None:
+            logger.info("Message %s missing guild before processing", message.id)
+            return
+        guild = message.guild
+
         if self.settings.debug_logs:
             logger.info(
                 "Message %s in #%s: %s attachments (%s images)",
@@ -83,9 +113,9 @@ class CryptoSpamBot(discord.Client):
         if match.matched:
             logger.info("Message %s matched known bad hashes", message.id)
             delete_result = await safe_delete(message)
-            author_roles = await self._format_author_roles(message.guild, message.author)
+            author_roles = await self._format_author_roles(guild, message.author)
             action_result = await self._apply_high_action_with_mod_check(
-                message.guild,
+                guild,
                 message.author,
                 confidence=1.0,
                 reason="Known bad crypto scam hash",
@@ -167,11 +197,11 @@ class CryptoSpamBot(discord.Client):
             return
 
         delete_result = await safe_delete(message)
-        author_roles = await self._format_author_roles(message.guild, message.author)
+        author_roles = await self._format_author_roles(guild, message.author)
         if decision.confidence_band.value == "high":
             logger.info("Message %s high confidence scam", message.id)
             action_result = await self._apply_high_action_with_mod_check(
-                message.guild,
+                guild,
                 message.author,
                 confidence=vision_result.confidence,
                 reason="High confidence crypto scam",

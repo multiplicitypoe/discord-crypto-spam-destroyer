@@ -25,6 +25,7 @@ class Settings:
     report_high: bool
     report_cooldown_s: float
     report_store_ttl_hours: int
+    message_processing_delay_s: float
     softban_delete_days: int
     hash_only_mode: bool
     debug_logs: bool
@@ -99,6 +100,7 @@ def load_settings() -> Settings:
         report_high=_env_bool("REPORT_HIGH", True),
         report_cooldown_s=_env_float("REPORT_COOLDOWN_S", 20.0),
         report_store_ttl_hours=_env_int("REPORT_STORE_TTL_HOURS", 24),
+        message_processing_delay_s=_env_float("MESSAGE_PROCESSING_DELAY_S", 0.0),
         softban_delete_days=_env_int("SOFTBAN_DELETE_DAYS", 1),
         hash_only_mode=_env_bool("HASH_ONLY_MODE", False),
         debug_logs=_env_bool("DEBUG_LOGS", False),
