@@ -111,7 +111,14 @@ class CryptoSpamBot(discord.Client):
             return
 
         images = [image.data for image in downloaded]
-        phashes = compute_phashes(images)
+        try:
+            phashes = await asyncio.wait_for(
+                asyncio.to_thread(compute_phashes, images),
+                timeout=2.0,
+            )
+        except asyncio.TimeoutError:
+            logger.info("Message %s skipped: hash computation timed out", message.id)
+            return
         known_bad = self.hash_store.load()
         match = match_hashes(phashes, known_bad)
         if match.matched:

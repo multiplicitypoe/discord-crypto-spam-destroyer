@@ -131,9 +131,10 @@ Optional (defaults shown):
 
 ```bash
 # Make sure you created the .env file
-# `make run-docker-bot` Does the below commands in one step (with sudo)
+# `make run-docker-bot` does the below commands in one step (with sudo)
+# Most of the arguments to docker run are for security hardening
 docker build -t discord-crypto-spam-destroyer .
-docker run --env-file .env -v "$(pwd)/data:/app/data" discord-crypto-spam-destroyer
+docker run --env-file .env -v "$(pwd)/data:/app/data" --read-only --tmpfs /tmp:rw,noexec,nosuid,nodev --cap-drop ALL --security-opt no-new-privileges --pids-limit 256 --memory 512m --cpus 1.0 --user "$(id -u):$(id -g)" discord-crypto-spam-destroyer
 ```
 
 ## Running with Poetry
@@ -172,6 +173,8 @@ make test
 ## Appendix: Multi-server configuration (advanced)
 
 If you run one bot instance across multiple servers, you can provide per-server overrides in a JSON file and point to it with `MULTI_SERVER_CONFIG_PATH`. This is optional; single-server setup with `.env` is still the recommended path.
+
+Security note: the bot only processes a subset of embedded image types (png/jpeg/webp/gif/bmp) and enforces a maximum pixel limit to avoid decompression bombs.
 
 `cp multi_server_config.json.example data/multi_server_config.json`, and then in your `.env`, which you still need, edit it to point at it (Docker users should keep it under `data/`):
 

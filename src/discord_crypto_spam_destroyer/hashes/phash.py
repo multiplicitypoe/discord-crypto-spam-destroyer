@@ -6,6 +6,7 @@ from typing import Iterable
 from PIL import Image
 import imagehash
 
+Image.MAX_IMAGE_PIXELS = 100_000_000
 
 def compute_phash(image_bytes: bytes) -> str:
     with Image.open(BytesIO(image_bytes)) as image:

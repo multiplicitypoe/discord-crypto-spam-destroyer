@@ -9,6 +9,13 @@ from typing import Iterable
 import discord
 
 IMAGE_EXTENSIONS = (".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp")
+ALLOWED_IMAGE_TYPES = {
+    "image/png",
+    "image/jpeg",
+    "image/gif",
+    "image/webp",
+    "image/bmp",
+}
 
 
 @dataclass(frozen=True)
@@ -20,9 +27,10 @@ class DownloadedImage:
 
 
 def is_image_attachment(attachment: discord.Attachment) -> bool:
-    content_type = attachment.content_type or ""
-    if content_type.startswith("image/"):
-        return True
+    content_type = attachment.content_type
+    if content_type:
+        normalized = content_type.split(";", 1)[0].strip()
+        return normalized in ALLOWED_IMAGE_TYPES
     return attachment.filename.lower().endswith(IMAGE_EXTENSIONS)
 
 

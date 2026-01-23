@@ -33,4 +33,4 @@ run-bot: install
 	bash -c 'set -a && . ./.env && set +a && PYTHONPATH=src poetry run python -m discord_crypto_spam_destroyer.bot'
 
 run-docker-bot:
-	sudo docker build -t discord-crypto-spam-destroyer . && sudo docker run --env-file .env -v $(PWD)/data:/app/data discord-crypto-spam-destroyer
+	sudo docker build -t discord-crypto-spam-destroyer . && sudo docker run --env-file .env -v $(PWD)/data:/app/data --read-only --tmpfs /tmp:rw,noexec,nosuid,nodev --cap-drop ALL --security-opt no-new-privileges --pids-limit 256 --memory 512m --cpus 1.0 --user $(shell id -u):$(shell id -g) discord-crypto-spam-destroyer
