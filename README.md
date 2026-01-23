@@ -45,6 +45,7 @@ OPENAI_API_KEY=...
 MOD_CHANNEL=...
 MOD_ROLE_ID=...
 ```
+If you are configuring for multiple servers, see the appendix, then come back to step 2.5
 
 2.5) Optional: make sure your APIs are working before you run the full bot:
 
@@ -59,8 +60,9 @@ make test-openai # Asks OpenAI if the images stored under known_bad_scam_images 
 make run-bot
 ```
 
+For Docker setup, see the Docker section below. 
+
 Having trouble? Consider setting DEBUG_LOGS=true to print verbose logs for each message being processed
-For Docker setup, see below
 
 ## Where to get keys
 
@@ -93,8 +95,8 @@ If you want hash-only mode (no AI image detection, just a fixed set of known bad
 Required:
 
 - `DISCORD_TOKEN` - bot token from Discord.
-- `MOD_CHANNEL` - channel id or name for reports.
-- `MOD_ROLE_ID` - restrict mod actions to a role.
+- `MOD_CHANNEL` - channel id or name for reports (omit if using multi-server config).
+- `MOD_ROLE_ID` - restrict mod actions to a role (omit if using multi-server config).
 
 Optional (defaults shown):
 
@@ -115,6 +117,7 @@ Optional (defaults shown):
 - `DEBUG_LOGS` (false) - verbose per-message logging for troubleshooting.
 - `DOWNLOAD_TIMEOUT_S` (8.0) - image download timeout.
 - `MAX_IMAGE_BYTES` (5000000) - max image size.
+- `MULTI_SERVER_CONFIG_PATH` - path to a multi-server JSON config file (advanced; see appendix below).
 - `TZ` (America/Los_Angeles) - optional container timezone override so that your logs are readable
 
 ## Slash command
@@ -122,6 +125,7 @@ Optional (defaults shown):
 `/add_hash` - Upload an image to add its perceptual hash to the denylist. Use this when you spot a scam image before the model does. 
 * Hashes are saved via this Slash command and the Report embed button to the bad_hashes.txt file in your clone of this repository, assuming you start the bot with either the docker or non-docker Makefile targets. 
 * If you want to dump images you know are scams and add their hashes all at once (it will preserve ones added through Discord), drop the images in the data/known_bad_scam_images folder and run `make hashes`
+
 
 ## Running with Docker
 
@@ -163,4 +167,53 @@ make test-discord
 
 ```bash
 make test
+```
+
+## Appendix: Multi-server configuration (advanced)
+
+If you run one bot instance across multiple servers, you can provide per-server overrides in a JSON file and point to it with `MULTI_SERVER_CONFIG_PATH`. This is optional; single-server setup with `.env` is still the recommended path.
+
+`cp multi_server_config.json.example multi_server_config.json`, and then in your `.env`, which you still need, edit it to point at it:
+
+```bash
+MULTI_SERVER_CONFIG_PATH=multi_server_config.json
+DISCORD_TOKEN=xxx
+```
+
+Each top-level key is a server id string. Values override any env defaults for that server. The only settings that cannot be overridden are the Discord bot token, hash file path, and report store TTL.
+
+If any server is missing `mod_channel` or `mod_role_id` after merging defaults + overrides, the bot will refuse to start and log the missing server IDs.
+
+Example JSON:
+
+```json
+{
+  "123456789012345678": {
+    "mod_channel": "mod-alerts",
+    "mod_role_id": 111111111111111111,
+    "action_high": "softban",
+    "action_medium": "delete_and_report",
+    "confidence_high": 0.85,
+    "confidence_medium": 0.65,
+    "report_high": true,
+    "report_cooldown_s": 20.0,
+    "hash_only_mode": false,
+    "openai_model": "gpt-4o-mini",
+    "message_processing_delay_s": 1.5,
+    "min_image_count": 3,
+    "max_images_to_analyze": 4,
+    "download_timeout_s": 8.0,
+    "max_image_bytes": 5000000,
+    "softban_delete_days": 1,
+    "debug_logs": false
+  },
+  "987654321098765432": {
+    "mod_channel": "security-log",
+    "mod_role_id": 222222222222222222,
+    "action_high": "report_only",
+    "action_medium": "delete_only",
+    "hash_only_mode": true,
+    "message_processing_delay_s": 2.0
+  }
+}
 ```

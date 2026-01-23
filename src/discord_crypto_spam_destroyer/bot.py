@@ -8,7 +8,7 @@ from pathlib import Path
 import discord
 from discord import app_commands
 
-from discord_crypto_spam_destroyer.config import Settings, load_settings
+from discord_crypto_spam_destroyer.config import ResolvedSettings, Settings, load_settings, resolve_settings
 from discord_crypto_spam_destroyer.models import VisionResult
 from discord_crypto_spam_destroyer.utils.image import DownloadedImage
 from discord_crypto_spam_destroyer.discord_ui.mod_report import (
@@ -40,11 +40,14 @@ class CryptoSpamBot(discord.Client):
         self.settings = settings
         self.hash_store = FileHashStore(Path(settings.known_bad_hash_path))
         self.tree = app_commands.CommandTree(self)
-        self._report_cooldown: dict[int, float] = {}
+        self._report_cooldown: dict[tuple[int, int], float] = {}
+        self._settings_cache: dict[int, ResolvedSettings] = {}
+        self._missing_mod_channel_warned: set[int] = set()
         self.report_store = ReportStore(Path("data") / "report_store.json")
 
     async def on_ready(self) -> None:
         logger.info("Logged in as %s", self.user)
+        await self._validate_guild_settings()
         await self._register_commands()
         await self._restore_persistent_views()
 
@@ -56,8 +59,14 @@ class CryptoSpamBot(discord.Client):
         if not attachments:
             return
 
-        if self.settings.message_processing_delay_s > 0:
-            await asyncio.sleep(self.settings.message_processing_delay_s)
+        if message.guild is None:
+            logger.info("Message %s missing guild before processing", message.id)
+            return
+        guild = message.guild
+        settings = self._get_resolved_settings(guild.id)
+
+        if settings.message_processing_delay_s > 0:
+            await asyncio.sleep(settings.message_processing_delay_s)
             try:
                 message = await message.channel.fetch_message(message.id)
             except discord.NotFound:
@@ -78,12 +87,7 @@ class CryptoSpamBot(discord.Client):
             if not attachments:
                 return
 
-        if message.guild is None:
-            logger.info("Message %s missing guild before processing", message.id)
-            return
-        guild = message.guild
-
-        if self.settings.debug_logs:
+        if settings.debug_logs:
             logger.info(
                 "Message %s in #%s: %s attachments (%s images)",
                 message.id,
@@ -92,17 +96,17 @@ class CryptoSpamBot(discord.Client):
                 len(attachments),
             )
         downloaded: list[DownloadedImage] = []
-        for attachment in attachments[: self.settings.max_images_to_analyze]:
+        for attachment in attachments[: settings.max_images_to_analyze]:
             downloaded_image = await read_attachment(
                 attachment,
-                self.settings.max_image_bytes,
-                self.settings.download_timeout_s,
+                settings.max_image_bytes,
+                settings.download_timeout_s,
             )
             if downloaded_image:
                 downloaded.append(downloaded_image)
 
         if not downloaded:
-            if self.settings.debug_logs:
+            if settings.debug_logs:
                 logger.info("Message %s skipped: could not download images", message.id)
             return
 
@@ -119,8 +123,10 @@ class CryptoSpamBot(discord.Client):
                 message.author,
                 confidence=1.0,
                 reason="Known bad crypto scam hash",
+                settings=settings,
             )
-            if self._report_allowed(message.author.id):
+
+            if self._report_allowed(guild.id, message.author.id, settings):
                 logger.info("Report sent (hash match) for message %s", message.id)
                 await self._send_report(
                     message,
@@ -138,32 +144,32 @@ class CryptoSpamBot(discord.Client):
             return
 
         if not phashes:
-            if self.settings.debug_logs:
+            if settings.debug_logs:
                 logger.info("Message %s skipped: no valid hashes", message.id)
             return
 
         selection = select_images(
             [a.url for a in attachments],
-            self.settings.min_image_count,
-            self.settings.max_images_to_analyze,
+            settings.min_image_count,
+            settings.max_images_to_analyze,
         )
         if not selection.qualifies:
-            if self.settings.debug_logs:
+            if settings.debug_logs:
                 logger.info(
                     "Message %s skipped: need %s images, got %s",
                     message.id,
-                    self.settings.min_image_count,
+                    settings.min_image_count,
                     selection.total_images,
                 )
             return
 
-        if self.settings.hash_only_mode:
-            if self.settings.debug_logs:
+        if settings.hash_only_mode:
+            if settings.debug_logs:
                 logger.info("Message %s skipped: hash-only mode", message.id)
             return
 
-        if not self.settings.openai_api_key:
-            if self.settings.debug_logs:
+        if not settings.openai_api_key:
+            if settings.debug_logs:
                 logger.info("Message %s skipped: OPENAI_API_KEY not set", message.id)
             return
 
@@ -171,8 +177,8 @@ class CryptoSpamBot(discord.Client):
         try:
             vision_result = await asyncio.to_thread(
                 classify_images,
-                self.settings.openai_api_key,
-                self.settings.openai_model,
+                settings.openai_api_key,
+                settings.openai_model,
                 images_base64,
             )
         except Exception:
@@ -188,11 +194,11 @@ class CryptoSpamBot(discord.Client):
 
         decision = decision_from_result(
             vision_result,
-            self.settings.confidence_high,
-            self.settings.confidence_medium,
+            settings.confidence_high,
+            settings.confidence_medium,
         )
         if not decision.is_scam:
-            if self.settings.debug_logs:
+            if settings.debug_logs:
                 logger.info("Message %s not flagged: %s", message.id, decision.reason)
             return
 
@@ -205,8 +211,9 @@ class CryptoSpamBot(discord.Client):
                 message.author,
                 confidence=vision_result.confidence,
                 reason="High confidence crypto scam",
+                settings=settings,
             )
-            if self.settings.report_high and self._report_allowed(message.author.id):
+            if settings.report_high and self._report_allowed(guild.id, message.author.id, settings):
                 logger.info("Report sent (high confidence) for message %s", message.id)
                 await self._send_report(
                     message,
@@ -222,12 +229,12 @@ class CryptoSpamBot(discord.Client):
                 )
             return
 
-        if self.settings.action_medium == "delete_only":
-            if self.settings.debug_logs:
+        if settings.action_medium == "delete_only":
+            if settings.debug_logs:
                 logger.info("Message %s deleted without report", message.id)
             return
 
-        if self._report_allowed(message.author.id):
+        if self._report_allowed(guild.id, message.author.id, settings):
             logger.info("Report sent (medium confidence) for message %s", message.id)
             await self._send_report(
                 message,
@@ -259,8 +266,10 @@ class CryptoSpamBot(discord.Client):
     ) -> None:
         if message.guild is None:
             return
-        channel = await self._resolve_mod_channel(message.guild)
+        settings = self._get_resolved_settings(message.guild.id)
+        channel = await self._resolve_mod_channel(message.guild, settings)
         if channel is None:
+            await self._warn_missing_mod_channel(message.guild, settings)
             return
         if vision_result:
             indicators = build_indicator_text(
@@ -275,7 +284,7 @@ class CryptoSpamBot(discord.Client):
             confidence = 1.0
             reasons = [reason_override or "Known bad hash"]
         action_suggestion = action_suggestion_override or (
-            f"/kick {author.id}" if self.settings.action_high == "kick" else f"/ban {author.id}"
+            f"/kick {author.id}" if settings.action_high == "kick" else f"/ban {author.id}"
         )
         author_roles = author_roles_override or await self._format_author_roles(message.guild, author)
         embed = build_report_embed(
@@ -296,7 +305,7 @@ class CryptoSpamBot(discord.Client):
             images=downloaded,
             hash_store=self.hash_store,
             all_hashes=list(all_hashes),
-            mod_role_id=self.settings.mod_role_id,
+            mod_role_id=settings.mod_role_id,
             allow_hash_add=allow_hash_add,
             kick_disabled=kick_disabled,
             report_store=self.report_store,
@@ -310,7 +319,7 @@ class CryptoSpamBot(discord.Client):
             channel_id=channel.id,
             guild_id=message.guild.id,
             author_id=author.id,
-            mod_role_id=self.settings.mod_role_id,
+            mod_role_id=settings.mod_role_id,
             allow_hash_add=allow_hash_add,
             kick_disabled=kick_disabled,
             all_hashes=list(all_hashes),
@@ -320,8 +329,6 @@ class CryptoSpamBot(discord.Client):
         context.report_record = report_record
 
     async def _register_commands(self) -> None:
-        if not self.settings.mod_channel:
-            return
         command = app_commands.Command(
             name="add_hash",
             description="Add an image hash to the denylist.",
@@ -335,21 +342,23 @@ class CryptoSpamBot(discord.Client):
         interaction: discord.Interaction,
         image: discord.Attachment,
     ) -> None:
-        if self.settings.mod_role_id:
-            if not interaction.user or not isinstance(interaction.user, discord.Member):
-                await interaction.response.send_message("Permission check failed.", ephemeral=True)
-                return
-            if not any(role.id == self.settings.mod_role_id for role in interaction.user.roles):
-                await interaction.response.send_message("Missing Mod role.", ephemeral=True)
-                return
         if not interaction.guild:
             await interaction.response.send_message("This command can only be used in a server.", ephemeral=True)
             return
-        mod_channel = await self._resolve_mod_channel(interaction.guild)
+        settings = self._get_resolved_settings(interaction.guild.id)
+        if settings.mod_role_id:
+            if not interaction.user or not isinstance(interaction.user, discord.Member):
+                await interaction.response.send_message("Permission check failed.", ephemeral=True)
+                return
+            if not any(role.id == settings.mod_role_id for role in interaction.user.roles):
+                await interaction.response.send_message("Missing Mod role.", ephemeral=True)
+                return
+        mod_channel = await self._resolve_mod_channel(interaction.guild, settings)
         if not mod_channel:
+            await self._warn_missing_mod_channel(interaction.guild, settings)
             await interaction.response.send_message("Mod channel not found.", ephemeral=True)
             return
-        downloaded = await read_attachment(image, self.settings.max_image_bytes, self.settings.download_timeout_s)
+        downloaded = await read_attachment(image, settings.max_image_bytes, settings.download_timeout_s)
         if not downloaded:
             await interaction.response.send_message("Failed to read image.", ephemeral=True)
             return
@@ -397,16 +406,52 @@ class CryptoSpamBot(discord.Client):
             f"{result_detail} Logged to {mod_channel.mention}.",
         )
 
-    async def _resolve_mod_channel(self, guild: discord.Guild) -> discord.TextChannel | None:
-        if not self.settings.mod_channel:
+    async def _resolve_mod_channel(
+        self,
+        guild: discord.Guild,
+        settings: ResolvedSettings,
+    ) -> discord.TextChannel | None:
+        if not settings.mod_channel:
             return None
-        if self.settings.mod_channel.isdigit():
-            channel = guild.get_channel(int(self.settings.mod_channel))
+        if settings.mod_channel.isdigit():
+            channel = guild.get_channel(int(settings.mod_channel))
             if isinstance(channel, discord.TextChannel):
                 return channel
             return None
         for channel in guild.text_channels:
-            if channel.name == self.settings.mod_channel:
+            if channel.name == settings.mod_channel:
+                return channel
+        return None
+
+    async def _warn_missing_mod_channel(
+        self,
+        guild: discord.Guild,
+        settings: ResolvedSettings,
+    ) -> None:
+        if guild.id in self._missing_mod_channel_warned:
+            return
+        logger.info("Mod channel is not configured for guild %s", guild.id)
+        self._missing_mod_channel_warned.add(guild.id)
+        channel = await self._select_fallback_channel(guild)
+        if not channel:
+            return
+        role_mention = f"<@&{settings.mod_role_id}> " if settings.mod_role_id else ""
+        await channel.send(
+            f"{role_mention}Mod channel is not configured for this server. "
+            "Set MOD_CHANNEL or a per-guild mod_channel in the multi-server config."
+        )
+
+    async def _select_fallback_channel(
+        self,
+        guild: discord.Guild,
+    ) -> discord.TextChannel | None:
+        me = guild.me
+        if me is None:
+            return None
+        if guild.system_channel and guild.system_channel.permissions_for(me).send_messages:
+            return guild.system_channel
+        for channel in guild.text_channels:
+            if channel.permissions_for(me).send_messages:
                 return channel
         return None
 
@@ -416,25 +461,26 @@ class CryptoSpamBot(discord.Client):
         author: discord.abc.User,
         confidence: float,
         reason: str,
+        settings: ResolvedSettings,
     ) -> str:
-        if self.settings.action_high == "report_only":
+        if settings.action_high == "report_only":
             return "report only"
-        if self.settings.mod_role_id:
+        if settings.mod_role_id:
             member = await self._get_member(guild, author.id)
-            if member and any(role.id == self.settings.mod_role_id for role in member.roles):
+            if member and any(role.id == settings.mod_role_id for role in member.roles):
                 return "no kick (author is Mod)"
         success = await apply_high_action(
             guild,
             author.id,
-            self.settings.action_high,
+            settings.action_high,
             reason,
-            softban_delete_days=self.settings.softban_delete_days,
+            softban_delete_days=settings.softban_delete_days,
         )
         if not success:
             return "kick failed"
-        if self.settings.action_high == "softban":
+        if settings.action_high == "softban":
             return "softban"
-        if self.settings.action_high == "ban":
+        if settings.action_high == "ban":
             return "ban"
         return "kick"
 
@@ -447,15 +493,16 @@ class CryptoSpamBot(discord.Client):
     def _should_disable_kick(self, action_result: str | None) -> bool:
         return action_result in {"kick", "ban", "softban"}
 
-    def _report_allowed(self, user_id: int) -> bool:
-        cooldown = self.settings.report_cooldown_s
+    def _report_allowed(self, guild_id: int, user_id: int, settings: ResolvedSettings) -> bool:
+        cooldown = settings.report_cooldown_s
         if cooldown <= 0:
             return True
         now = time.monotonic()
-        last = self._report_cooldown.get(user_id)
+        key = (guild_id, user_id)
+        last = self._report_cooldown.get(key)
         if last and now - last < cooldown:
             return False
-        self._report_cooldown[user_id] = now
+        self._report_cooldown[key] = now
         return True
 
     async def _get_member(self, guild: discord.Guild, user_id: int) -> discord.Member | None:
@@ -519,6 +566,31 @@ class CryptoSpamBot(discord.Client):
             restored += 1
         if restored:
             logger.info("Restored %s report views", restored)
+
+    def _get_resolved_settings(self, guild_id: int) -> ResolvedSettings:
+        cached = self._settings_cache.get(guild_id)
+        if cached:
+            return cached
+        resolved = resolve_settings(self.settings, guild_id)
+        self._settings_cache[guild_id] = resolved
+        return resolved
+
+    async def _validate_guild_settings(self) -> None:
+        missing: list[str] = []
+        for guild in self.guilds:
+            resolved = self._get_resolved_settings(guild.id)
+            missing_fields: list[str] = []
+            if not resolved.mod_channel:
+                missing_fields.append("MOD_CHANNEL")
+            if not resolved.mod_role_id:
+                missing_fields.append("MOD_ROLE_ID")
+            if missing_fields:
+                missing.append(f"{guild.id} ({', '.join(missing_fields)})")
+        if missing:
+            missing_ids = ", ".join(missing)
+            logger.error("Missing required settings for guild(s): %s", missing_ids)
+            await self.close()
+            raise RuntimeError("Missing required settings for guild(s): " + missing_ids)
 
     async def _format_author_roles(self, guild: discord.Guild, author: discord.abc.User) -> str:
         member = await self._get_member(guild, author.id)
