@@ -117,7 +117,7 @@ Optional (defaults shown):
 - `DEBUG_LOGS` (false) - verbose per-message logging for troubleshooting.
 - `DOWNLOAD_TIMEOUT_S` (8.0) - image download timeout.
 - `MAX_IMAGE_BYTES` (5000000) - max image size.
-- `MULTI_SERVER_CONFIG_PATH` - path to a multi-server JSON config file (advanced; see appendix below).
+- `MULTI_SERVER_CONFIG_PATH` - path to a multi-server JSON config file (advanced; see appendix below). For Docker, use a path under `data/`.
 - `TZ` (America/Los_Angeles) - optional container timezone override so that your logs are readable
 
 ## Slash command
@@ -173,10 +173,10 @@ make test
 
 If you run one bot instance across multiple servers, you can provide per-server overrides in a JSON file and point to it with `MULTI_SERVER_CONFIG_PATH`. This is optional; single-server setup with `.env` is still the recommended path.
 
-`cp multi_server_config.json.example multi_server_config.json`, and then in your `.env`, which you still need, edit it to point at it:
+`cp multi_server_config.json.example data/multi_server_config.json`, and then in your `.env`, which you still need, edit it to point at it (Docker users should keep it under `data/`):
 
 ```bash
-MULTI_SERVER_CONFIG_PATH=multi_server_config.json
+MULTI_SERVER_CONFIG_PATH=data/multi_server_config.json
 DISCORD_TOKEN=xxx
 ```
 
