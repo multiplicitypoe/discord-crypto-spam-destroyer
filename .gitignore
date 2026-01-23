@@ -2,6 +2,7 @@
 __pycache__/
 .venv/
 .env
+multi_server_config.json
 *.egg-info/
 *.pyc
 build/
