@@ -13,7 +13,7 @@ These scams are repetitive, but hard to catch with the native Discord Automodera
 - Deletes scams and optionally kicks, bans, softbans (ban+unban) based on your config, or just reports to a configured mod channel
 - Optional OpenAI vision classification for unknown images.
 - Only calls OpenAI if the message has N or more images (default 3) to keep costs down.
-  - Cost note: with `gpt-4o-mini`, our 512x512-ish scam images are a tiny fraction of a cent each. Switch to gpt-4.1-mini to cut costs by 50%
+  - Cost note: with `gpt-4o-mini`, our 512x512-ish scam images are less than a cent each. Switch to gpt-4.1-mini to cut costs by 50%. Sequential classification stops early on high-confidence hits by default to keep costs down; enable parallel classification if you prefer speed over cost.
 - `/add_hash` slash command lets mods upload an image to add its hash to the auto-delete/kick list.
 
 ## Screenshots
@@ -105,6 +105,7 @@ Optional (defaults shown):
 - `HASH_ONLY_MODE` (false) - skip OpenAI and use hash denylist only.
 - `MIN_IMAGE_COUNT` (3) - min images required before OpenAI is called. Hash checks still run on any message with images.
 - `MAX_IMAGES_TO_ANALYZE` (4) - cap on images analyzed per message.
+- `PARALLEL_IMAGE_CLASSIFICATION` (false) - when true, classifies all selected images at once for speed; Costs **3x as much** if true. When false, runs sequentially with early-exit on high-confidence scams to reduce costs and still works fine for the common bot waves
 - `KNOWN_BAD_HASH_PATH` (data/bad_hashes.txt) - denylist storage path.
 - `ACTION_HIGH` (softban) - `kick`, `ban`, `softban` (ban+unban, deletes recent messages), or `report_only` for high confidence.
 - `ACTION_MEDIUM` (delete_and_report) - `delete_and_report` or `delete_only`.

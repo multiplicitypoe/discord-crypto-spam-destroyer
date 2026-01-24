@@ -263,35 +263,60 @@ class CryptoSpamBot(discord.Client):
         api_key = settings.openai_api_key
         if not api_key:
             raise RuntimeError("OPENAI_API_KEY not set")
-        for index, image in enumerate(downloaded, start=1):
+        if settings.parallel_image_classification:
+            tasks = [
+                asyncio.to_thread(
+                    classify_images,
+                    api_key,
+                    settings.openai_model,
+                    [to_data_url(image)],
+                )
+                for image in downloaded
+            ]
+            results = await asyncio.gather(*tasks)
             if settings.debug_logs:
                 logger.info(
-                    "Classifying image %s/%s for message %s",
-                    index,
+                    "Classified %s images in parallel for message %s",
                     total,
                     message_id,
                 )
-            result = await asyncio.to_thread(
-                classify_images,
-                api_key,
-                settings.openai_model,
-                [to_data_url(image)],
-            )
-            if result.is_crypto_scam:
-                if best_scam is None or result.confidence > best_scam.confidence:
-                    best_scam = result
-                if result.confidence >= settings.confidence_high:
-                    if settings.debug_logs:
-                        logger.info(
-                            "Message %s early exit: high confidence scam on image %s/%s",
-                            message_id,
-                            index,
-                            total,
-                        )
-                    return result
-            else:
-                if best_non_scam is None or result.confidence > best_non_scam.confidence:
-                    best_non_scam = result
+            for result in results:
+                if result.is_crypto_scam:
+                    if best_scam is None or result.confidence > best_scam.confidence:
+                        best_scam = result
+                else:
+                    if best_non_scam is None or result.confidence > best_non_scam.confidence:
+                        best_non_scam = result
+        else:
+            for index, image in enumerate(downloaded, start=1):
+                if settings.debug_logs:
+                    logger.info(
+                        "Classifying image %s/%s for message %s",
+                        index,
+                        total,
+                        message_id,
+                    )
+                result = await asyncio.to_thread(
+                    classify_images,
+                    api_key,
+                    settings.openai_model,
+                    [to_data_url(image)],
+                )
+                if result.is_crypto_scam:
+                    if best_scam is None or result.confidence > best_scam.confidence:
+                        best_scam = result
+                    if result.confidence >= settings.confidence_high:
+                        if settings.debug_logs:
+                            logger.info(
+                                "Message %s early exit: high confidence scam on image %s/%s",
+                                message_id,
+                                index,
+                                total,
+                            )
+                        return result
+                else:
+                    if best_non_scam is None or result.confidence > best_non_scam.confidence:
+                        best_non_scam = result
         if best_scam:
             return best_scam
         if best_non_scam:

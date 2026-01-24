@@ -13,6 +13,7 @@
     "message_processing_delay_s": 1.5,
     "min_image_count": 3,
     "max_images_to_analyze": 4,
+    "parallel_image_classification": false,
     "download_timeout_s": 8.0,
     "max_image_bytes": 5000000,
     "softban_delete_days": 1,

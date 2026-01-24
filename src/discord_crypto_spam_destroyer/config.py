@@ -16,6 +16,7 @@ MULTI_SERVER_ALLOWED_KEYS = {
     "openai_model",
     "min_image_count",
     "max_images_to_analyze",
+    "parallel_image_classification",
     "action_high",
     "action_medium",
     "confidence_high",
@@ -40,6 +41,7 @@ class Settings:
     openai_model: str
     min_image_count: int
     max_images_to_analyze: int
+    parallel_image_classification: bool
     known_bad_hash_path: str
     action_high: ActionHigh
     action_medium: ActionMedium
@@ -67,6 +69,7 @@ class ResolvedSettings:
     openai_model: str
     min_image_count: int
     max_images_to_analyze: int
+    parallel_image_classification: bool
     action_high: ActionHigh
     action_medium: ActionMedium
     confidence_high: float
@@ -89,6 +92,7 @@ class SettingsOverrides:
     openai_model: str | None | object = UNSET
     min_image_count: int | None | object = UNSET
     max_images_to_analyze: int | None | object = UNSET
+    parallel_image_classification: bool | None | object = UNSET
     action_high: ActionHigh | None | object = UNSET
     action_medium: ActionMedium | None | object = UNSET
     confidence_high: float | None | object = UNSET
@@ -159,6 +163,9 @@ def _parse_multi_server_overrides(payload: dict[str, Any]) -> SettingsOverrides:
         openai_model=_as_optional_str(payload.get("openai_model", UNSET)),
         min_image_count=_as_optional_int(payload.get("min_image_count", UNSET)),
         max_images_to_analyze=_as_optional_int(payload.get("max_images_to_analyze", UNSET)),
+        parallel_image_classification=_as_optional_bool(
+            payload.get("parallel_image_classification", UNSET)
+        ),
         action_high=_as_optional_action_high(payload.get("action_high", UNSET)),
         action_medium=_as_optional_action_medium(payload.get("action_medium", UNSET)),
         confidence_high=_as_optional_float(payload.get("confidence_high", UNSET)),
@@ -272,6 +279,7 @@ def resolve_settings(base: Settings, guild_id: int) -> ResolvedSettings:
             openai_model=base.openai_model,
             min_image_count=base.min_image_count,
             max_images_to_analyze=base.max_images_to_analyze,
+            parallel_image_classification=base.parallel_image_classification,
             action_high=base.action_high,
             action_medium=base.action_medium,
             confidence_high=base.confidence_high,
@@ -305,6 +313,11 @@ def resolve_settings(base: Settings, guild_id: int) -> ResolvedSettings:
             "max_images_to_analyze",
             overrides.max_images_to_analyze,
             base.max_images_to_analyze,
+        ),
+        parallel_image_classification=_resolve_required(
+            "parallel_image_classification",
+            overrides.parallel_image_classification,
+            base.parallel_image_classification,
         ),
         action_high=action_high,
         action_medium=action_medium,
@@ -377,6 +390,7 @@ def load_settings() -> Settings:
         openai_model=_env("OPENAI_MODEL", "gpt-4o-mini"),
         min_image_count=_env_int("MIN_IMAGE_COUNT", 3),
         max_images_to_analyze=_env_int("MAX_IMAGES_TO_ANALYZE", 4),
+        parallel_image_classification=_env_bool("PARALLEL_IMAGE_CLASSIFICATION", False),
         known_bad_hash_path=_env("KNOWN_BAD_HASH_PATH", "data/bad_hashes.txt"),
         action_high=action_high,
         action_medium=action_medium,
