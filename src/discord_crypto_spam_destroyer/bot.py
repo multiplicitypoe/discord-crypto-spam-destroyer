@@ -180,14 +180,8 @@ class CryptoSpamBot(discord.Client):
                 logger.info("Message %s skipped: OPENAI_API_KEY not set", message.id)
             return
 
-        images_base64 = [to_data_url(image) for image in downloaded]
         try:
-            vision_result = await asyncio.to_thread(
-                classify_images,
-                settings.openai_api_key,
-                settings.openai_model,
-                images_base64,
-            )
+            vision_result = await self._classify_images(message.id, settings, downloaded)
         except Exception:
             logger.exception("OpenAI vision classification failed")
             return
@@ -256,6 +250,53 @@ class CryptoSpamBot(discord.Client):
                 author_roles_override=author_roles,
             )
 
+
+    async def _classify_images(
+        self,
+        message_id: int,
+        settings: ResolvedSettings,
+        downloaded: list[DownloadedImage],
+    ) -> VisionResult:
+        best_scam: VisionResult | None = None
+        best_non_scam: VisionResult | None = None
+        total = len(downloaded)
+        api_key = settings.openai_api_key
+        if not api_key:
+            raise RuntimeError("OPENAI_API_KEY not set")
+        for index, image in enumerate(downloaded, start=1):
+            if settings.debug_logs:
+                logger.info(
+                    "Classifying image %s/%s for message %s",
+                    index,
+                    total,
+                    message_id,
+                )
+            result = await asyncio.to_thread(
+                classify_images,
+                api_key,
+                settings.openai_model,
+                [to_data_url(image)],
+            )
+            if result.is_crypto_scam:
+                if best_scam is None or result.confidence > best_scam.confidence:
+                    best_scam = result
+                if result.confidence >= settings.confidence_high:
+                    if settings.debug_logs:
+                        logger.info(
+                            "Message %s early exit: high confidence scam on image %s/%s",
+                            message_id,
+                            index,
+                            total,
+                        )
+                    return result
+            else:
+                if best_non_scam is None or result.confidence > best_non_scam.confidence:
+                    best_non_scam = result
+        if best_scam:
+            return best_scam
+        if best_non_scam:
+            return best_non_scam
+        raise RuntimeError("No images available for classification")
 
     async def _send_report(
         self,
