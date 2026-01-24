@@ -8,12 +8,15 @@ from typing import Any, Literal, cast
 
 ActionHigh = Literal["kick", "ban", "softban", "report_only"]
 ActionMedium = Literal["delete_and_report", "delete_only"]
+OpenAIImageDetail = Literal["low", "high"]
 
 UNSET = object()
 
 MULTI_SERVER_ALLOWED_KEYS = {
     "openai_api_key",
     "openai_model",
+    "openai_image_detail",
+    "openai_max_image_dim",
     "min_image_count",
     "max_images_to_analyze",
     "parallel_image_classification",
@@ -39,6 +42,8 @@ class Settings:
     discord_token: str
     openai_api_key: str | None
     openai_model: str
+    openai_image_detail: OpenAIImageDetail
+    openai_max_image_dim: int
     min_image_count: int
     max_images_to_analyze: int
     parallel_image_classification: bool
@@ -67,6 +72,8 @@ class ResolvedSettings:
     discord_token: str
     openai_api_key: str | None
     openai_model: str
+    openai_image_detail: OpenAIImageDetail
+    openai_max_image_dim: int
     min_image_count: int
     max_images_to_analyze: int
     parallel_image_classification: bool
@@ -90,6 +97,8 @@ class ResolvedSettings:
 class SettingsOverrides:
     openai_api_key: str | None | object = UNSET
     openai_model: str | None | object = UNSET
+    openai_image_detail: str | None | object = UNSET
+    openai_max_image_dim: int | None | object = UNSET
     min_image_count: int | None | object = UNSET
     max_images_to_analyze: int | None | object = UNSET
     parallel_image_classification: bool | None | object = UNSET
@@ -153,6 +162,13 @@ def _parse_action_medium(value: str) -> ActionMedium:
     return cast(ActionMedium, value)
 
 
+def _parse_openai_image_detail(value: str) -> OpenAIImageDetail:
+    normalized = value.lower()
+    if normalized not in {"low", "high"}:
+        raise ValueError("OPENAI_IMAGE_DETAIL must be 'low' or 'high'")
+    return cast(OpenAIImageDetail, normalized)
+
+
 def _parse_multi_server_overrides(payload: dict[str, Any]) -> SettingsOverrides:
     if "action_high" in payload and not isinstance(payload["action_high"], str):
         raise ValueError("action_high must be a string")
@@ -161,6 +177,8 @@ def _parse_multi_server_overrides(payload: dict[str, Any]) -> SettingsOverrides:
     return SettingsOverrides(
         openai_api_key=_as_optional_str(payload.get("openai_api_key", UNSET)),
         openai_model=_as_optional_str(payload.get("openai_model", UNSET)),
+        openai_image_detail=_as_optional_str(payload.get("openai_image_detail", UNSET)),
+        openai_max_image_dim=_as_optional_int(payload.get("openai_max_image_dim", UNSET)),
         min_image_count=_as_optional_int(payload.get("min_image_count", UNSET)),
         max_images_to_analyze=_as_optional_int(payload.get("max_images_to_analyze", UNSET)),
         parallel_image_classification=_as_optional_bool(
@@ -277,6 +295,8 @@ def resolve_settings(base: Settings, guild_id: int) -> ResolvedSettings:
             discord_token=base.discord_token,
             openai_api_key=base.openai_api_key,
             openai_model=base.openai_model,
+            openai_image_detail=base.openai_image_detail,
+            openai_max_image_dim=base.openai_max_image_dim,
             min_image_count=base.min_image_count,
             max_images_to_analyze=base.max_images_to_analyze,
             parallel_image_classification=base.parallel_image_classification,
@@ -308,6 +328,18 @@ def resolve_settings(base: Settings, guild_id: int) -> ResolvedSettings:
         discord_token=base.discord_token,
         openai_api_key=_resolve_value(overrides.openai_api_key, base.openai_api_key),
         openai_model=_resolve_required("openai_model", overrides.openai_model, base.openai_model),
+        openai_image_detail=_parse_openai_image_detail(
+            _resolve_required(
+                "openai_image_detail",
+                overrides.openai_image_detail,
+                base.openai_image_detail,
+            )
+        ),
+        openai_max_image_dim=_resolve_required(
+            "openai_max_image_dim",
+            overrides.openai_max_image_dim,
+            base.openai_max_image_dim,
+        ),
         min_image_count=_resolve_required("min_image_count", overrides.min_image_count, base.min_image_count),
         max_images_to_analyze=_resolve_required(
             "max_images_to_analyze",
@@ -388,6 +420,8 @@ def load_settings() -> Settings:
         discord_token=discord_token,
         openai_api_key=openai_api_key,
         openai_model=_env("OPENAI_MODEL", "gpt-4o-mini"),
+        openai_image_detail=_parse_openai_image_detail(_env("OPENAI_IMAGE_DETAIL", "low")),
+        openai_max_image_dim=_env_int("OPENAI_MAX_IMAGE_DIM", 512),
         min_image_count=_env_int("MIN_IMAGE_COUNT", 3),
         max_images_to_analyze=_env_int("MAX_IMAGES_TO_ANALYZE", 4),
         parallel_image_classification=_env_bool("PARALLEL_IMAGE_CLASSIFICATION", False),

@@ -59,6 +59,7 @@ class CryptoSpamBot(discord.Client):
         if not attachments:
             return
 
+        handler_start = time.monotonic()
         if message.guild is None:
             logger.info("Message %s missing guild before processing", message.id)
             return
@@ -66,7 +67,14 @@ class CryptoSpamBot(discord.Client):
         settings = self._get_resolved_settings(guild.id)
 
         if settings.message_processing_delay_s > 0:
+            delay_start = time.monotonic()
             await asyncio.sleep(settings.message_processing_delay_s)
+            if settings.debug_logs:
+                logger.info(
+                    "Message %s processing delay took %.2fs",
+                    message.id,
+                    time.monotonic() - delay_start,
+                )
             try:
                 message = await message.channel.fetch_message(message.id)
             except discord.NotFound:
@@ -96,6 +104,8 @@ class CryptoSpamBot(discord.Client):
                 len(attachments),
             )
         downloaded: list[DownloadedImage] = []
+        download_start = time.monotonic()
+        download_target = min(len(attachments), settings.max_images_to_analyze)
         for attachment in attachments[: settings.max_images_to_analyze]:
             downloaded_image = await read_attachment(
                 attachment,
@@ -104,6 +114,20 @@ class CryptoSpamBot(discord.Client):
             )
             if downloaded_image:
                 downloaded.append(downloaded_image)
+        if settings.debug_logs:
+            logger.info(
+                "Message %s image download took %.2fs (%s/%s kept)",
+                message.id,
+                time.monotonic() - download_start,
+                len(downloaded),
+                download_target,
+            )
+            if downloaded:
+                logger.info(
+                    "Message %s raw image sizes: %s",
+                    message.id,
+                    ", ".join(str(len(image.data)) for image in downloaded),
+                )
 
         if not downloaded:
             if settings.debug_logs:
@@ -111,6 +135,7 @@ class CryptoSpamBot(discord.Client):
             return
 
         images = [image.data for image in downloaded]
+        hash_start = time.monotonic()
         try:
             phashes = await asyncio.wait_for(
                 asyncio.to_thread(compute_phashes, images),
@@ -119,6 +144,12 @@ class CryptoSpamBot(discord.Client):
         except asyncio.TimeoutError:
             logger.info("Message %s skipped: hash computation timed out", message.id)
             return
+        if settings.debug_logs:
+            logger.info(
+                "Message %s hash computation took %.2fs",
+                message.id,
+                time.monotonic() - hash_start,
+            )
         known_bad = self.hash_store.load()
         match = match_hashes(phashes, known_bad)
         if match.matched:
@@ -180,11 +211,23 @@ class CryptoSpamBot(discord.Client):
                 logger.info("Message %s skipped: OPENAI_API_KEY not set", message.id)
             return
 
+        vision_start = time.monotonic()
         try:
             vision_result = await self._classify_images(message.id, settings, downloaded)
         except Exception:
             logger.exception("OpenAI vision classification failed")
             return
+        if settings.debug_logs:
+            logger.info(
+                "Message %s vision classification took %.2fs",
+                message.id,
+                time.monotonic() - vision_start,
+            )
+            logger.info(
+                "Message %s total processing time %.2fs",
+                message.id,
+                time.monotonic() - handler_start,
+            )
 
         logger.info(
             "Message %s vision result: scam=%s confidence=%.2f",
@@ -264,14 +307,32 @@ class CryptoSpamBot(discord.Client):
         if not api_key:
             raise RuntimeError("OPENAI_API_KEY not set")
         if settings.parallel_image_classification:
+            prepared: list[tuple[str, int, str]] = []
+            for index, image in enumerate(downloaded, start=1):
+                data_url, byte_size, content_type = to_data_url(
+                    image,
+                    settings.openai_max_image_dim,
+                )
+                prepared.append((data_url, byte_size, content_type))
+                if settings.debug_logs:
+                    logger.info(
+                        "Message %s image %s/%s prepared for OpenAI: %s bytes (%s, detail=%s)",
+                        message_id,
+                        index,
+                        total,
+                        byte_size,
+                        content_type,
+                        settings.openai_image_detail,
+                    )
             tasks = [
                 asyncio.to_thread(
                     classify_images,
                     api_key,
                     settings.openai_model,
-                    [to_data_url(image)],
+                    [data_url],
+                    settings.openai_image_detail,
                 )
-                for image in downloaded
+                for data_url, _, _ in prepared
             ]
             results = await asyncio.gather(*tasks)
             if settings.debug_logs:
@@ -289,6 +350,10 @@ class CryptoSpamBot(discord.Client):
                         best_non_scam = result
         else:
             for index, image in enumerate(downloaded, start=1):
+                data_url, byte_size, content_type = to_data_url(
+                    image,
+                    settings.openai_max_image_dim,
+                )
                 if settings.debug_logs:
                     logger.info(
                         "Classifying image %s/%s for message %s",
@@ -296,12 +361,31 @@ class CryptoSpamBot(discord.Client):
                         total,
                         message_id,
                     )
+                    logger.info(
+                        "Message %s image %s/%s prepared for OpenAI: %s bytes (%s, detail=%s)",
+                        message_id,
+                        index,
+                        total,
+                        byte_size,
+                        content_type,
+                        settings.openai_image_detail,
+                    )
+                image_start = time.monotonic()
                 result = await asyncio.to_thread(
                     classify_images,
                     api_key,
                     settings.openai_model,
-                    [to_data_url(image)],
+                    [data_url],
+                    settings.openai_image_detail,
                 )
+                if settings.debug_logs:
+                    logger.info(
+                        "Message %s image %s/%s OpenAI took %.2fs",
+                        message_id,
+                        index,
+                        total,
+                        time.monotonic() - image_start,
+                    )
                 if result.is_crypto_scam:
                     if best_scam is None or result.confidence > best_scam.confidence:
                         best_scam = result

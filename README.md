@@ -102,6 +102,8 @@ Optional (defaults shown):
 
 - `OPENAI_API_KEY` - **Highly recommended**. OpenAI key for vision classification.
 - `OPENAI_MODEL` (gpt-4o-mini) - model for image classification (our sample images are ~512x512, so per-image cost is very low). You can switch to `gpt-4.1-mini` if you want to cut model costs further.
+- `OPENAI_IMAGE_DETAIL` (low) - OpenAI vision detail level. `low` is faster/cheaper; `high` can be slower but more accurate on tiny text.
+- `OPENAI_MAX_IMAGE_DIM` (512) - resizes images before sending to OpenAI; lower sizes are faster/cheaper, `0` disables resizing.
 - `HASH_ONLY_MODE` (false) - skip OpenAI and use hash denylist only.
 - `MIN_IMAGE_COUNT` (3) - min images required before OpenAI is called. Hash checks still run on any message with images.
 - `MAX_IMAGES_TO_ANALYZE` (4) - cap on images analyzed per message.

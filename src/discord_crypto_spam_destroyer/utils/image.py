@@ -7,6 +7,7 @@ from io import BytesIO
 from typing import Iterable
 
 import discord
+from PIL import Image
 
 IMAGE_EXTENSIONS = (".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp")
 ALLOWED_IMAGE_TYPES = {
@@ -24,6 +25,27 @@ class DownloadedImage:
     content_type: str
     filename: str
     url: str
+
+
+def resize_image_for_openai(image: DownloadedImage, max_dim: int) -> tuple[bytes, str]:
+    if max_dim <= 0:
+        return image.data, image.content_type
+    try:
+        with Image.open(BytesIO(image.data)) as original:
+            original = original.convert("RGB")
+            width, height = original.size
+            if max(width, height) <= max_dim:
+                return image.data, image.content_type
+            scale = max_dim / float(max(width, height))
+            resized = original.resize(
+                (int(width * scale), int(height * scale)),
+                resample=Image.Resampling.LANCZOS,
+            )
+            buffer = BytesIO()
+            resized.save(buffer, format="JPEG", quality=82, optimize=True)
+            return buffer.getvalue(), "image/jpeg"
+    except Exception:
+        return image.data, image.content_type
 
 
 def is_image_attachment(attachment: discord.Attachment) -> bool:
@@ -55,9 +77,10 @@ async def read_attachment(
     )
 
 
-def to_data_url(image: DownloadedImage) -> str:
-    encoded = base64.b64encode(image.data).decode("ascii")
-    return f"data:{image.content_type};base64,{encoded}"
+def to_data_url(image: DownloadedImage, max_dim: int) -> tuple[str, int, str]:
+    resized, content_type = resize_image_for_openai(image, max_dim)
+    encoded = base64.b64encode(resized).decode("ascii")
+    return f"data:{content_type};base64,{encoded}", len(resized), content_type
 
 
 def build_discord_files(images: Iterable[DownloadedImage]) -> list[discord.File]:

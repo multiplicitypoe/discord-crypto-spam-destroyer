@@ -15,7 +15,10 @@ SYSTEM_PROMPT = (
 )
 
 
-def build_vision_request(images_base64: Sequence[str]) -> list[dict[str, object]]:
+def build_vision_request(
+    images_base64: Sequence[str],
+    image_detail: str,
+) -> list[dict[str, object]]:
     return [
         {"role": "system", "content": SYSTEM_PROMPT},
         {
@@ -23,7 +26,10 @@ def build_vision_request(images_base64: Sequence[str]) -> list[dict[str, object]
             "content": [
                 {"type": "text", "text": "Classify these images."},
                 *[
-                    {"type": "image_url", "image_url": {"url": image_data}}
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": image_data, "detail": image_detail},
+                    }
                     for image_data in images_base64
                 ],
             ],
@@ -46,12 +52,17 @@ def parse_vision_response(raw_content: str) -> VisionResult:
     )
 
 
-def classify_images(api_key: str, model: str, images_base64: Sequence[str]) -> VisionResult:
+def classify_images(
+    api_key: str,
+    model: str,
+    images_base64: Sequence[str],
+    image_detail: str,
+) -> VisionResult:
     client = OpenAI(api_key=api_key)
-    messages = build_vision_request(images_base64)
+    messages = build_vision_request(images_base64, image_detail)
     response = client.chat.completions.create(
         model=model,
-        messages=messages,
+        messages=messages,  # type: ignore[arg-type]
         response_format={"type": "json_object"},
         temperature=0,
     )
