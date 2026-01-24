@@ -211,8 +211,8 @@ def build_report_embed(
         inline=False,
     )
     embed.add_field(
-        name="Message",
-        value=f"[Jump to message]({message.jump_url})",
+        name="Message link",
+        value=message.jump_url,
         inline=False,
     )
     embed.add_field(name="Confidence", value=f"{confidence:.2f}", inline=True)
