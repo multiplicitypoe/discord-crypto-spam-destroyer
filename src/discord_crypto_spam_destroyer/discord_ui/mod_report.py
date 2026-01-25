@@ -207,7 +207,7 @@ def build_report_embed(
     embed = discord.Embed(title="Possible crypto scam", color=discord.Color.red())
     embed.add_field(
         name="Author",
-        value=f"{author.mention} ({author.id}) {author_roles}",
+        value=f"{author.mention} ({author}, {author.id}) {author_roles}",
         inline=False,
     )
     embed.add_field(
