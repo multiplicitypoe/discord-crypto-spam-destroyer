@@ -20,7 +20,7 @@ These scams are repetitive, but hard to catch with the native Discord Automodera
 
 OpenAI vision detection (model-flagged scam):
 
-![Bot report for OpenAI detection](data/screenshots/withembed.webp "OpenAI vision scam report")
+![Bot report for OpenAI detection](data/screenshots/example_crypto_openai_detected.png "OpenAI vision scam report")
 
 Known-bad hash match (auto delete + report):
 
