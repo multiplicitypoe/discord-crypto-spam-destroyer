@@ -19,7 +19,8 @@ def main() -> None:
         filename=image_path.name,
         url=str(image_path),
     )
-    result = classify_images(api_key, "gpt-4o-mini", [to_data_url(image)])
+    data_url, *_ = to_data_url(image, 512)
+    result = classify_images(api_key, "gpt-4o-mini", [data_url], "low")
     print(result)
 
 

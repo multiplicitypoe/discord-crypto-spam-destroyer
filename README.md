@@ -13,7 +13,7 @@ These scams are repetitive, but hard to catch with the native Discord Automodera
 - Deletes scams and optionally kicks, bans, softbans (ban+unban) based on your config, or just reports to a configured mod channel
 - Optional OpenAI vision classification for unknown images.
 - Only calls OpenAI if the message has N or more images (default 3) to keep costs down.
-  - Cost note: with `gpt-4o-mini`, our 512x512-ish scam images are less than a cent each. Switch to gpt-4.1-mini to cut costs by 50%. Sequential classification stops early on high-confidence hits by default to keep costs down; enable parallel classification if you prefer speed over cost.
+  - You can switch to `gpt-4.1-mini` and `detail=low` to try adjusting costs for your uses.  Sequential classification stops early on high-confidence hits by default to keep costs down; enable parallel classification if you prefer speed over cost.
 - `/add_hash` slash command lets mods upload an image to add its hash to the auto-delete/kick list.
 
 ## Screenshots
@@ -74,7 +74,7 @@ Discord bot token:
 OpenAI API key (optional if using hash-only mode):
 - https://platform.openai.com/api-keys
 - Create a key and paste it into `.env`
-- If you are using restricted keys, enable `chat.completions` request access and make sure the key can call `gpt-4o-mini`
+- If you are using restricted keys, enable `chat.completions` request access and make sure the key can call `gpt-4.1-mini`
 
 Do not forget to copy your mod channel ID and mod role ID (right-click the channel or role -> Copy ID).
 
@@ -101,7 +101,7 @@ Required:
 Optional (defaults shown):
 
 - `OPENAI_API_KEY` - **Highly recommended**. OpenAI key for vision classification.
-- `OPENAI_MODEL` (gpt-4o-mini) - model for image classification (our sample images are ~512x512, so per-image cost is very low). You can switch to `gpt-4.1-mini` if you want to cut model costs further.
+- `OPENAI_MODEL` (gpt-4.1-mini) - model for image classification. On low-detail 512px images, `gpt-4.1-mini` is substantially cheaper in practice than `gpt-4o-mini`.
 - `OPENAI_IMAGE_DETAIL` (low) - OpenAI vision detail level. `low` is faster/cheaper; `high` can be slower but more accurate on tiny text.
 - `OPENAI_MAX_IMAGE_DIM` (512) - resizes images before sending to OpenAI; lower sizes are faster/cheaper, `0` disables resizing.
 - `HASH_ONLY_MODE` (false) - skip OpenAI and use hash denylist only.
@@ -204,7 +204,7 @@ Example JSON:
     "report_high": true,
     "report_cooldown_s": 20.0,
     "hash_only_mode": false,
-    "openai_model": "gpt-4o-mini",
+    "openai_model": "gpt-4.1-mini",
     "message_processing_delay_s": 1.5,
     "min_image_count": 3,
     "max_images_to_analyze": 4,

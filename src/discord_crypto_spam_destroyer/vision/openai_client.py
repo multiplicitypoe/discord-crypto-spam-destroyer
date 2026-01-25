@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import json
+import logging
 from typing import Sequence
 
 from openai import OpenAI
 
 from discord_crypto_spam_destroyer.models import VisionIndicators, VisionResult
+
+logger = logging.getLogger("discord_crypto_spam_destroyer")
 
 SYSTEM_PROMPT = (
     "You are a moderation classifier for Discord image spam. "
@@ -57,14 +60,29 @@ def classify_images(
     model: str,
     images_base64: Sequence[str],
     image_detail: str,
+    image_meta: list[dict[str, object]] | None = None,
+    debug_logs: bool = False,
 ) -> VisionResult:
     client = OpenAI(api_key=api_key)
     messages = build_vision_request(images_base64, image_detail)
     response = client.chat.completions.create(
         model=model,
-        messages=messages,  # type: ignore[arg-type]
+        messages=messages,  # type: ignore[arg-type,assignment]
         response_format={"type": "json_object"},
         temperature=0,
     )
+    if debug_logs:
+        usage = response.usage
+        logger.info(
+            "OpenAI usage model=%s request_id=%s detail=%s n_images=%s img_meta=%s prompt_tokens=%s completion_tokens=%s total_tokens=%s",
+            model,
+            response.id,
+            image_detail,
+            len(images_base64),
+            image_meta,
+            getattr(usage, "prompt_tokens", None),
+            getattr(usage, "completion_tokens", None),
+            getattr(usage, "total_tokens", None),
+        )
     content = response.choices[0].message.content or "{}"
     return parse_vision_response(content)

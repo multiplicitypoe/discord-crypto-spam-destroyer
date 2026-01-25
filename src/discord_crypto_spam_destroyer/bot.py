@@ -307,22 +307,33 @@ class CryptoSpamBot(discord.Client):
         if not api_key:
             raise RuntimeError("OPENAI_API_KEY not set")
         if settings.parallel_image_classification:
-            prepared: list[tuple[str, int, str]] = []
+            prepared: list[tuple[str, dict[str, object]]] = []
             for index, image in enumerate(downloaded, start=1):
-                data_url, byte_size, content_type = to_data_url(
+                data_url, byte_size, content_type, width, height, quality = to_data_url(
                     image,
                     settings.openai_max_image_dim,
                 )
-                prepared.append((data_url, byte_size, content_type))
+                image_meta: dict[str, object] = {
+                    "w": width,
+                    "h": height,
+                    "bytes": byte_size,
+                    "format": content_type,
+                }
+                if quality is not None:
+                    image_meta["quality"] = quality
+                prepared.append((data_url, image_meta))
                 if settings.debug_logs:
                     logger.info(
-                        "Message %s image %s/%s prepared for OpenAI: %s bytes (%s, detail=%s)",
+                        "Message %s image %s/%s prepared for OpenAI: %s bytes (%s, detail=%s, size=%sx%s, quality=%s)",
                         message_id,
                         index,
                         total,
                         byte_size,
                         content_type,
                         settings.openai_image_detail,
+                        width,
+                        height,
+                        quality,
                     )
             tasks = [
                 asyncio.to_thread(
@@ -331,8 +342,10 @@ class CryptoSpamBot(discord.Client):
                     settings.openai_model,
                     [data_url],
                     settings.openai_image_detail,
+                    [image_meta],
+                    settings.debug_logs,
                 )
-                for data_url, _, _ in prepared
+                for data_url, image_meta in prepared
             ]
             results = await asyncio.gather(*tasks)
             if settings.debug_logs:
@@ -350,10 +363,18 @@ class CryptoSpamBot(discord.Client):
                         best_non_scam = result
         else:
             for index, image in enumerate(downloaded, start=1):
-                data_url, byte_size, content_type = to_data_url(
+                data_url, byte_size, content_type, width, height, quality = to_data_url(
                     image,
                     settings.openai_max_image_dim,
                 )
+                image_meta: dict[str, object] = {
+                    "w": width,
+                    "h": height,
+                    "bytes": byte_size,
+                    "format": content_type,
+                }
+                if quality is not None:
+                    image_meta["quality"] = quality
                 if settings.debug_logs:
                     logger.info(
                         "Classifying image %s/%s for message %s",
@@ -362,13 +383,16 @@ class CryptoSpamBot(discord.Client):
                         message_id,
                     )
                     logger.info(
-                        "Message %s image %s/%s prepared for OpenAI: %s bytes (%s, detail=%s)",
+                        "Message %s image %s/%s prepared for OpenAI: %s bytes (%s, detail=%s, size=%sx%s, quality=%s)",
                         message_id,
                         index,
                         total,
                         byte_size,
                         content_type,
                         settings.openai_image_detail,
+                        width,
+                        height,
+                        quality,
                     )
                 image_start = time.monotonic()
                 result = await asyncio.to_thread(
@@ -377,6 +401,8 @@ class CryptoSpamBot(discord.Client):
                     settings.openai_model,
                     [data_url],
                     settings.openai_image_detail,
+                    [image_meta],
+                    settings.debug_logs,
                 )
                 if settings.debug_logs:
                     logger.info(

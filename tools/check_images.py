@@ -40,8 +40,9 @@ def main() -> None:
             filename=path.name,
             url=str(path),
         )
+        data_url, *_ = to_data_url(image, 512)
         try:
-            result = classify_images(api_key, "gpt-4o-mini", [to_data_url(image)])
+            result = classify_images(api_key, "gpt-4o-mini", [data_url], "low")
         except Exception as exc:
             print(f"{path.name}: ERROR {type(exc).__name__}: {exc}")
             continue

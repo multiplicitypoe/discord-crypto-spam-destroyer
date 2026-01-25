@@ -419,7 +419,7 @@ def load_settings() -> Settings:
     return Settings(
         discord_token=discord_token,
         openai_api_key=openai_api_key,
-        openai_model=_env("OPENAI_MODEL", "gpt-4o-mini"),
+        openai_model=_env("OPENAI_MODEL", "gpt-4.1-mini"),
         openai_image_detail=_parse_openai_image_detail(_env("OPENAI_IMAGE_DETAIL", "low")),
         openai_max_image_dim=_env_int("OPENAI_MAX_IMAGE_DIM", 512),
         min_image_count=_env_int("MIN_IMAGE_COUNT", 3),

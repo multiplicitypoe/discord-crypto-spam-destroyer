@@ -9,7 +9,7 @@
     "report_high": true,
     "report_cooldown_s": 20.0,
     "hash_only_mode": false,
-    "openai_model": "gpt-4o-mini",
+    "openai_model": "gpt-4.1-mini",
     "openai_image_detail": "low",
     "openai_max_image_dim": 512,
     "message_processing_delay_s": 1.5,
