@@ -1,6 +1,6 @@
 # Discord Crypto Scam Bot Destroyer
 
-This bot helps mods deal with the “3-4 pictures of twitter or a crypto exchange” crypto scam spam. It checks known bad image hashes first, then (optionally) asks OpenAI to classify new patterns. It’s very fast when dealing with known images, and should just cost cents per day if you use the OpenAI API, for a very large server. 
+This bot helps mods deal with the “3-4 pictures of twitter or a crypto exchange” crypto scam spam. It checks known bad image hashes first, then (optionally) asks OpenAI to classify new patterns. It’s very fast when dealing with known images, and should just barely anything. This curently costs 1 cent per day for a 250k member server that gets a lot of these scam attempts.
 
 ## What is this for?
 
