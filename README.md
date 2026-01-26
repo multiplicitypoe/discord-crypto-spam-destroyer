@@ -13,7 +13,7 @@ These scams are repetitive, but hard to catch with the native Discord Automodera
 - Deletes scams and optionally kicks, bans, softbans (ban+unban) based on your config, or just reports to a configured mod channel
 - Optional OpenAI vision classification for unknown images.
 - Only calls OpenAI if the message has N or more images (default 3) to keep costs down.
-  - You can switch to `gpt-4.1-mini` and `detail=low` to try adjusting costs for your uses.  Sequential classification stops early on high-confidence hits by default to keep costs down; enable parallel classification if you prefer speed over cost.
+  - This uses`gpt-4.1-mini` by default, which analyzes ~33 requests per one cent after automatic resizing. Sequential classification stops early on high-confidence hits by default to keep costs down.
 - `/add_hash` slash command lets mods upload an image to add its hash to the auto-delete/kick list.
 
 ## Screenshots

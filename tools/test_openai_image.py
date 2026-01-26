@@ -20,7 +20,7 @@ def main() -> None:
         url=str(image_path),
     )
     data_url, *_ = to_data_url(image, 512)
-    result = classify_images(api_key, "gpt-4o-mini", [data_url], "low")
+    result = classify_images(api_key, "gpt-4.1-mini", [data_url], "low")
     print(result)
 
 
