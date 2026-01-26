@@ -8,34 +8,33 @@ from pathlib import Path
 import discord
 
 try:
+    from discord_crypto_spam_destroyer.config import load_settings, resolve_settings
     from discord_crypto_spam_destroyer.discord_ui.mod_report import (
         ReportContext,
         ReportView,
         build_report_embed,
     )
+    from discord_crypto_spam_destroyer.discord_ui.report_store import ReportStore
     from discord_crypto_spam_destroyer.hashes.store import FileHashStore
 except ModuleNotFoundError:
     sys.path.append(str(Path("src").resolve()))
+    from discord_crypto_spam_destroyer.config import load_settings, resolve_settings
     from discord_crypto_spam_destroyer.discord_ui.mod_report import (
         ReportContext,
         ReportView,
         build_report_embed,
     )
+    from discord_crypto_spam_destroyer.discord_ui.report_store import ReportStore
     from discord_crypto_spam_destroyer.hashes.store import FileHashStore
-
-MOD_CHANNEL_ENV = "MOD_CHANNEL"
-
 
 @dataclass(frozen=True)
 class TargetInfo:
     guild: discord.Guild
     channel: discord.TextChannel
     author: discord.abc.User
+    mod_role_id: int | None
 
 
-class NoopReportStore:
-    def delete_report(self, message_id: int) -> None:
-        return
 
 
 class TestReportBot(discord.Client):
@@ -58,8 +57,6 @@ class TestReportBot(discord.Client):
         if last_message is None:
             last_message = await target.channel.send("Test report baseline message.")
 
-        mod_role_value = os.getenv("MOD_ROLE_ID")
-        mod_role_id = int(mod_role_value) if mod_role_value else None
         context = ReportContext(
             guild=target.guild,
             channel=target.channel,
@@ -68,10 +65,10 @@ class TestReportBot(discord.Client):
             images=[],
             hash_store=FileHashStore(Path("data") / "bad_hashes.txt"),
             all_hashes=[],
-            mod_role_id=mod_role_id,
+            mod_role_id=target.mod_role_id,
             allow_hash_add=True,
             kick_disabled=False,
-            report_store=NoopReportStore(),
+            report_store=ReportStore(Path("data") / "report_store.json"),
             report_record=None,
         )
 
@@ -95,10 +92,8 @@ class TestReportBot(discord.Client):
 
 
 async def resolve_target(client: discord.Client) -> TargetInfo | None:
+    settings = load_settings()
     guild_id = os.getenv("GUILD_ID")
-    mod_channel = os.getenv(MOD_CHANNEL_ENV)
-    if not mod_channel:
-        raise SystemExit("MOD_CHANNEL not set")
     target_user_id = os.getenv("TEST_TARGET_ID")
 
     guild: discord.Guild | None = None
@@ -109,11 +104,16 @@ async def resolve_target(client: discord.Client) -> TargetInfo | None:
     if guild is None:
         return None
 
+    resolved = resolve_settings(settings, guild.id)
+    mod_channel = resolved.mod_channel
+    if not mod_channel:
+        raise SystemExit("MOD_CHANNEL not set")
+
     channel: discord.TextChannel | None = None
     if mod_channel.isdigit():
-        resolved = guild.get_channel(int(mod_channel))
-        if isinstance(resolved, discord.TextChannel):
-            channel = resolved
+        resolved_channel = guild.get_channel(int(mod_channel))
+        if isinstance(resolved_channel, discord.TextChannel):
+            channel = resolved_channel
     else:
         for text_channel in guild.text_channels:
             if text_channel.name == mod_channel:
@@ -134,7 +134,12 @@ async def resolve_target(client: discord.Client) -> TargetInfo | None:
     if author is None:
         return None
 
-    return TargetInfo(guild=guild, channel=channel, author=author)
+    return TargetInfo(
+        guild=guild,
+        channel=channel,
+        author=author,
+        mod_role_id=resolved.mod_role_id,
+    )
 
 
 def main() -> None:
