@@ -1,10 +1,10 @@
 # Discord Crypto Scam Bot Destroyer
 
-This bot helps mods deal with the “3-4 pictures of twitter or a crypto exchange” crypto scam spam. It checks known bad image hashes first, then (optionally) asks OpenAI to classify new patterns. It’s very fast when dealing with known images, and should just barely anything. This curently costs 1 cent per day for a 250k member server that gets a lot of these scam attempts.
+This bot helps mods deal with the “3-4 pictures of twitter or a crypto exchange” crypto scam spam. It checks known bad image hashes first, then (optionally) asks OpenAI to scan images to see if they are scams. It’s very fast when dealing with known images and takes 2-3 seconds to delete/kick for brand new ones. This curently costs 1 cent per day for a 250k member server that gets a lot of these scam attempts.
 
 ## What is this for?
 
-These scams are repetitive, but hard to catch with the native Discord Automoderator, now that they stopped sending links to images, but rather direct uploads. Hashes catch the repeats quickly. The OpenAI vision step catches any new variants and makes this very hands-off, but you can turn it off if you want a hash‑only setup and don't mind some handholding. 
+These scams are repetitive, but hard to catch with the native Discord Automoderator, now that they stopped sending links to images, but rather direct uploads. Hashes catch the repeats quickly. The OpenAI vision step catches any new variants and makes this very hands-off. 
 
 ## What it does
 
@@ -13,7 +13,7 @@ These scams are repetitive, but hard to catch with the native Discord Automodera
 - Deletes scams and optionally kicks, bans, softbans (ban+unban) based on your config, or just reports to a configured mod channel
 - Optional OpenAI vision classification for unknown images.
 - Only calls OpenAI if the message has N or more images (default 3) to keep costs down.
-  - This uses`gpt-4.1-mini` by default, which analyzes ~33 requests per one cent after automatic resizing. Sequential classification stops early on high-confidence hits by default to keep costs down.
+  - This uses`gpt-4.1-mini` by default, which analyzes ~30 requests per $0.01 after automatic resizing.
 - `/add_hash` slash command lets mods upload an image to add its hash to the auto-delete/kick list.
 
 ## Screenshots
