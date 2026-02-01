@@ -1,0 +1,11 @@
+# Dev/test dependencies (human-edited).
+#
+# Update flow (one-time setup):
+#   python -m pip install --upgrade pip pip-tools
+#   pip-compile --output-file=requirements-dev.txt requirements-dev.in
+
+-r requirements.in
+
+pytest==8.3.2
+pytest-asyncio==0.23.8
+ruff==0.6.5
