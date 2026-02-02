@@ -44,9 +44,18 @@ run-bot: install
 
 build-docker:
 	@mkdir -p data
+	@if [ ! -s data/report_store.json ]; then \
+		printf '%s\n' '{"reports": []}' > data/report_store.json; \
+	fi
+	@chmod a+rw data/report_store.json 2>/dev/null || (command -v sudo >/dev/null 2>&1 && sudo chmod a+rw data/report_store.json) || true
 	sudo docker build -t discord-crypto-spam-destroyer . && sudo docker run --env-file .env -v $(PWD)/data:/app/data --read-only --tmpfs /tmp:rw,noexec,nosuid,nodev --cap-drop ALL --security-opt no-new-privileges --pids-limit 256 --memory 512m --cpus 1.0 --user $(shell id -u):$(shell id -g) discord-crypto-spam-destroyer
 
 run-docker:
+	@mkdir -p data
+	@if [ ! -s data/report_store.json ]; then \
+		printf '%s\n' '{"reports": []}' > data/report_store.json; \
+	fi
+	@chmod a+rw data/report_store.json 2>/dev/null || (command -v sudo >/dev/null 2>&1 && sudo chmod a+rw data/report_store.json) || true
 	sudo docker run --env-file .env -v $(PWD)/data:/app/data --read-only --tmpfs /tmp:rw,noexec,nosuid,nodev --cap-drop ALL --security-opt no-new-privileges --pids-limit 256 --memory 512m --cpus 1.0 --user $(shell id -u):$(shell id -g) discord-crypto-spam-destroyer
 
 run-docker-bot: build-docker run-docker
