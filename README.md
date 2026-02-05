@@ -111,6 +111,7 @@ Optional (defaults shown):
 - `KNOWN_BAD_HASH_PATH` (data/bad_hashes.txt) - denylist storage path.
 - `ACTION_HIGH` (softban) - `kick`, `ban`, `softban` (ban+unban, deletes recent messages), or `report_only` for high confidence.
 - `ACTION_MEDIUM` (delete_and_report) - `delete_and_report` or `delete_only`.
+- `ACTION_COOLDOWN_S` (60) - cooldown between auto kick/ban/softban actions for the same user; set to `0` to disable. Does not affect message deletion.
 - `CONFIDENCE_HIGH` (0.85) - high confidence cutoff.
 - `CONFIDENCE_MEDIUM` (0.65) - medium confidence cutoff.
 - `REPORT_HIGH` (true) - also report high-confidence cases to mods.
@@ -194,6 +195,7 @@ Example JSON:
     "mod_role_id": 111111111111111111,
     "action_high": "softban",
     "action_medium": "delete_and_report",
+    "action_cooldown_s": 60.0,
     "confidence_high": 0.85,
     "confidence_medium": 0.65,
     "report_high": true,

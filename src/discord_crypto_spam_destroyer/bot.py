@@ -41,6 +41,8 @@ class CryptoSpamBot(discord.Client):
         self.hash_store = FileHashStore(Path(settings.known_bad_hash_path))
         self.tree = app_commands.CommandTree(self)
         self._report_cooldown: dict[tuple[int, int], float] = {}
+        self._action_cooldown: dict[tuple[int, int], float] = {}
+        self._action_locks: dict[tuple[int, int], asyncio.Lock] = {}
         self._settings_cache: dict[int, ResolvedSettings] = {}
         self._missing_mod_channel_warned: set[int] = set()
         self.report_store = ReportStore(Path("data") / "report_store.json")
@@ -652,18 +654,41 @@ class CryptoSpamBot(discord.Client):
             member = await self._get_member(guild, author.id)
             if member and any(role.id == settings.mod_role_id for role in member.roles):
                 return "no kick (author is Mod)"
-        success = await apply_high_action(
-            guild,
-            author.id,
-            settings.action_high,
-            reason,
-            softban_delete_days=settings.softban_delete_days,
-        )
+        action = settings.action_high
+        cooldown = settings.action_cooldown_s
+        if action in {"kick", "ban", "softban"} and cooldown > 0:
+            key = (guild.id, author.id)
+            lock = self._action_locks.get(key)
+            if lock is None:
+                lock = asyncio.Lock()
+                self._action_locks[key] = lock
+            async with lock:
+                now = time.monotonic()
+                last = self._action_cooldown.get(key)
+                if last and now - last < cooldown:
+                    return f"no {action} (cooldown)"
+                success = await apply_high_action(
+                    guild,
+                    author.id,
+                    action,
+                    reason,
+                    softban_delete_days=settings.softban_delete_days,
+                )
+                if success:
+                    self._action_cooldown[key] = time.monotonic()
+        else:
+            success = await apply_high_action(
+                guild,
+                author.id,
+                action,
+                reason,
+                softban_delete_days=settings.softban_delete_days,
+            )
         if not success:
             return "kick failed"
-        if settings.action_high == "softban":
+        if action == "softban":
             return "softban"
-        if settings.action_high == "ban":
+        if action == "ban":
             return "ban"
         return "kick"
 

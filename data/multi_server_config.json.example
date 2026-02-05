@@ -4,6 +4,7 @@
     "mod_role_id": 111111111111111111,
     "action_high": "softban",
     "action_medium": "delete_and_report",
+    "action_cooldown_s": 60.0,
     "confidence_high": 0.85,
     "confidence_medium": 0.65,
     "report_high": true,

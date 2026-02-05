@@ -22,6 +22,7 @@ MULTI_SERVER_ALLOWED_KEYS = {
     "parallel_image_classification",
     "action_high",
     "action_medium",
+    "action_cooldown_s",
     "confidence_high",
     "confidence_medium",
     "mod_channel",
@@ -50,6 +51,7 @@ class Settings:
     known_bad_hash_path: str
     action_high: ActionHigh
     action_medium: ActionMedium
+    action_cooldown_s: float
     confidence_high: float
     confidence_medium: float
     mod_channel: str | None
@@ -79,6 +81,7 @@ class ResolvedSettings:
     parallel_image_classification: bool
     action_high: ActionHigh
     action_medium: ActionMedium
+    action_cooldown_s: float
     confidence_high: float
     confidence_medium: float
     mod_channel: str | None
@@ -104,6 +107,7 @@ class SettingsOverrides:
     parallel_image_classification: bool | None | object = UNSET
     action_high: ActionHigh | None | object = UNSET
     action_medium: ActionMedium | None | object = UNSET
+    action_cooldown_s: float | None | object = UNSET
     confidence_high: float | None | object = UNSET
     confidence_medium: float | None | object = UNSET
     mod_channel: str | None | object = UNSET
@@ -186,6 +190,7 @@ def _parse_multi_server_overrides(payload: dict[str, Any]) -> SettingsOverrides:
         ),
         action_high=_as_optional_action_high(payload.get("action_high", UNSET)),
         action_medium=_as_optional_action_medium(payload.get("action_medium", UNSET)),
+        action_cooldown_s=_as_optional_float(payload.get("action_cooldown_s", UNSET)),
         confidence_high=_as_optional_float(payload.get("confidence_high", UNSET)),
         confidence_medium=_as_optional_float(payload.get("confidence_medium", UNSET)),
         mod_channel=_as_optional_str(payload.get("mod_channel", UNSET)),
@@ -302,6 +307,7 @@ def resolve_settings(base: Settings, guild_id: int) -> ResolvedSettings:
             parallel_image_classification=base.parallel_image_classification,
             action_high=base.action_high,
             action_medium=base.action_medium,
+            action_cooldown_s=base.action_cooldown_s,
             confidence_high=base.confidence_high,
             confidence_medium=base.confidence_medium,
             mod_channel=base.mod_channel,
@@ -353,6 +359,11 @@ def resolve_settings(base: Settings, guild_id: int) -> ResolvedSettings:
         ),
         action_high=action_high,
         action_medium=action_medium,
+        action_cooldown_s=_resolve_required(
+            "action_cooldown_s",
+            overrides.action_cooldown_s,
+            base.action_cooldown_s,
+        ),
         confidence_high=_resolve_required(
             "confidence_high",
             overrides.confidence_high,
@@ -428,6 +439,7 @@ def load_settings() -> Settings:
         known_bad_hash_path=_env("KNOWN_BAD_HASH_PATH", "data/bad_hashes.txt"),
         action_high=action_high,
         action_medium=action_medium,
+        action_cooldown_s=_env_float("ACTION_COOLDOWN_S", 60.0),
         confidence_high=_env_float("CONFIDENCE_HIGH", 0.85),
         confidence_medium=_env_float("CONFIDENCE_MEDIUM", 0.65),
         mod_channel=_env_optional("MOD_CHANNEL"),
