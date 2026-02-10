@@ -531,13 +531,25 @@ class CryptoSpamBot(discord.Client):
             await interaction.response.send_message("This command can only be used in a server.", ephemeral=True)
             return
         settings = self._get_resolved_settings(interaction.guild.id)
+        if not interaction.user or not isinstance(interaction.user, discord.Member):
+            await interaction.response.send_message("Permission check failed.", ephemeral=True)
+            return
         if settings.mod_role_id:
-            if not interaction.user or not isinstance(interaction.user, discord.Member):
-                await interaction.response.send_message("Permission check failed.", ephemeral=True)
-                return
             if not any(role.id == settings.mod_role_id for role in interaction.user.roles):
-                await interaction.response.send_message("Missing Mod role.", ephemeral=True)
-                return
+                if not (
+                    interaction.user.guild_permissions.kick_members
+                    or interaction.user.guild_permissions.ban_members
+                ):
+                    await interaction.response.send_message(
+                        "Missing Mod role or kick/ban permission.", ephemeral=True
+                    )
+                    return
+        elif not (
+            interaction.user.guild_permissions.kick_members
+            or interaction.user.guild_permissions.ban_members
+        ):
+            await interaction.response.send_message("Missing kick/ban permission.", ephemeral=True)
+            return
         mod_channel = await self._resolve_mod_channel(interaction.guild, settings)
         if not mod_channel:
             await self._warn_missing_mod_channel(interaction.guild, settings)

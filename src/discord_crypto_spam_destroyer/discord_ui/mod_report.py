@@ -46,23 +46,23 @@ class ReportView(discord.ui.View):
                 if not context.allow_hash_add:
                     child.label = "Hashes already known"
 
-    async def _ensure_permissions(self, interaction: discord.Interaction, permission: str) -> bool:
+    async def _ensure_mod_or_kick_or_ban(self, interaction: discord.Interaction) -> bool:
         if not interaction.user or not isinstance(interaction.user, discord.Member):
-            await interaction.response.send_message(
-                "Permissions check failed.", ephemeral=True
-            )
+            await interaction.response.send_message("Permissions check failed.", ephemeral=True)
             return False
         if self.context.mod_role_id:
-            if not any(role.id == self.context.mod_role_id for role in interaction.user.roles):
-                await interaction.response.send_message("Missing Mod role.", ephemeral=True)
-                return False
-        if permission == "kick" and not interaction.user.guild_permissions.kick_members:
-            await interaction.response.send_message("Missing kick permission.", ephemeral=True)
+            if any(role.id == self.context.mod_role_id for role in interaction.user.roles):
+                return True
+            if interaction.user.guild_permissions.kick_members or interaction.user.guild_permissions.ban_members:
+                return True
+            await interaction.response.send_message(
+                "Missing Mod role or kick/ban permission.", ephemeral=True
+            )
             return False
-        if permission == "ban" and not interaction.user.guild_permissions.ban_members:
-            await interaction.response.send_message("Missing ban permission.", ephemeral=True)
-            return False
-        return True
+        if interaction.user.guild_permissions.kick_members or interaction.user.guild_permissions.ban_members:
+            return True
+        await interaction.response.send_message("Missing kick/ban permission.", ephemeral=True)
+        return False
 
     async def _finalize_action(self, interaction: discord.Interaction, result: str) -> None:
         for child in self.children:
@@ -105,7 +105,7 @@ class ReportView(discord.ui.View):
         interaction: discord.Interaction,
         button: discord.ui.Button,
     ) -> None:
-        if not await self._ensure_permissions(interaction, "kick"):
+        if not await self._ensure_mod_or_kick_or_ban(interaction):
             return
         if self.context.kick_disabled:
             await self._finalize_action(interaction, "Kick disabled for auto-actions")
@@ -126,7 +126,7 @@ class ReportView(discord.ui.View):
         interaction: discord.Interaction,
         button: discord.ui.Button,
     ) -> None:
-        if not await self._ensure_permissions(interaction, "ban"):
+        if not await self._ensure_mod_or_kick_or_ban(interaction):
             return
         logger.info("Mod action: ban pressed by %s", interaction.user)
         success = await apply_high_action(
@@ -148,6 +148,8 @@ class ReportView(discord.ui.View):
         interaction: discord.Interaction,
         button: discord.ui.Button,
     ) -> None:
+        if not await self._ensure_mod_or_kick_or_ban(interaction):
+            return
         logger.info("Mod action: no action necessary pressed by %s", interaction.user)
         await self._finalize_action(interaction, "No action necessary")
 
@@ -157,7 +159,7 @@ class ReportView(discord.ui.View):
         interaction: discord.Interaction,
         button: discord.ui.Button,
     ) -> None:
-        if not await self._ensure_permissions(interaction, "kick"):
+        if not await self._ensure_mod_or_kick_or_ban(interaction):
             return
         existing = self.context.hash_store.load()
         new_hashes = [phash for phash in self.context.all_hashes if phash not in existing]
