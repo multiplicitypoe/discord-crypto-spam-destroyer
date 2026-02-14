@@ -116,7 +116,7 @@ Optional (defaults shown):
 - `CONFIDENCE_MEDIUM` (0.65) - medium confidence cutoff.
 - `REPORT_HIGH` (true) - also report high-confidence cases to mods.
 - `REPORT_COOLDOWN_S` (20) - suppress duplicate reports per user during bursts.
-- `REPORT_STORE_TTL_HOURS` (24) - keep report buttons alive across restarts for this many hours.
+- `REPORT_STORE_TTL_HOURS` (168) - keep report buttons alive across restarts for this many hours (7 days by default).
 - `MESSAGE_PROCESSING_DELAY_S` (0.0) - delay all hash/AI processing for image messages; if another bot deletes the message during the delay, this bot skips it.
 - `DEBUG_LOGS` (false) - verbose per-message logging for troubleshooting.
 - `DOWNLOAD_TIMEOUT_S` (8.0) - image download timeout.
