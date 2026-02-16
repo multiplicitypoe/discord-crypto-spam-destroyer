@@ -135,10 +135,19 @@ Optional (defaults shown):
 
 ```bash
 # Make sure you created the .env file
-# `make run-docker` does the below commands in one step (with sudo)
+# Build only:
+make build-docker
+
+# Run foreground container (stops/removes previous discord-crypto-spam-destroyer first):
+make run-docker
+
+# Optional helpers:
+make stop-docker   # stop/remove named container only
+make docker        # build then run
+
 # Most of the arguments to docker run are for security hardening
-docker build -t discord-crypto-spam-destroyer .
-docker run --env-file .env -v "$(pwd)/data:/app/data" --read-only --tmpfs /tmp:rw,noexec,nosuid,nodev --cap-drop ALL --security-opt no-new-privileges --pids-limit 256 --memory 512m --cpus 1.0 --user "$(id -u):$(id -g)" discord-crypto-spam-destroyer
+docker build -t discord-crypto-spam-destroyer:latest .
+docker run --rm --name discord-crypto-spam-destroyer --env-file .env -v "$(pwd)/data:/app/data" --read-only --tmpfs /tmp:rw,noexec,nosuid,nodev --cap-drop ALL --security-opt no-new-privileges --pids-limit 256 --memory 512m --cpus 1.0 --user "$(id -u):$(id -g)" discord-crypto-spam-destroyer:latest
 ```
 
 ## Tools
