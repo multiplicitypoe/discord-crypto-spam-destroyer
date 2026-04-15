@@ -112,6 +112,7 @@ Optional (defaults shown):
 - `ACTION_HIGH` (softban) - `kick`, `ban`, `softban` (ban+unban, deletes recent messages), or `report_only` for high confidence.
 - `ACTION_MEDIUM` (delete_and_report) - `delete_and_report` or `delete_only`.
 - `ACTION_COOLDOWN_S` (60) - cooldown between auto kick/ban/softban actions for the same user; set to `0` to disable. Does not affect message deletion.
+- `SOFTBAN_DELETE_DAYS` (1) - number of days of recent messages to purge when `ACTION_HIGH=softban` (passed to Discord's `delete_message_days`; max 7).
 - `CONFIDENCE_HIGH` (0.85) - high confidence cutoff.
 - `CONFIDENCE_MEDIUM` (0.65) - medium confidence cutoff.
 - `REPORT_HIGH` (true) - also report high-confidence cases to mods.
