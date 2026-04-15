@@ -35,6 +35,8 @@ MULTI_SERVER_ALLOWED_KEYS = {
     "debug_logs",
     "download_timeout_s",
     "max_image_bytes",
+    "channel_whitelist",
+    "role_whitelist",
 }
 
 
@@ -65,6 +67,8 @@ class Settings:
     debug_logs: bool
     download_timeout_s: float
     max_image_bytes: int
+    channel_whitelist: tuple[int, ...]
+    role_whitelist: tuple[int, ...]
     multi_server_config_path: str | None
     multi_server_config: dict[int, "SettingsOverrides"]
 
@@ -94,6 +98,8 @@ class ResolvedSettings:
     debug_logs: bool
     download_timeout_s: float
     max_image_bytes: int
+    channel_whitelist: tuple[int, ...]
+    role_whitelist: tuple[int, ...]
 
 
 @dataclass(frozen=True)
@@ -120,6 +126,8 @@ class SettingsOverrides:
     debug_logs: bool | None | object = UNSET
     download_timeout_s: float | None | object = UNSET
     max_image_bytes: int | None | object = UNSET
+    channel_whitelist: tuple[int, ...] | None | object = UNSET
+    role_whitelist: tuple[int, ...] | None | object = UNSET
 
 
 def _env(name: str, default: str) -> str:
@@ -203,6 +211,8 @@ def _parse_multi_server_overrides(payload: dict[str, Any]) -> SettingsOverrides:
         debug_logs=_as_optional_bool(payload.get("debug_logs", UNSET)),
         download_timeout_s=_as_optional_float(payload.get("download_timeout_s", UNSET)),
         max_image_bytes=_as_optional_int(payload.get("max_image_bytes", UNSET)),
+        channel_whitelist=_as_optional_int_tuple("channel_whitelist", payload.get("channel_whitelist", UNSET)),
+        role_whitelist=_as_optional_int_tuple("role_whitelist", payload.get("role_whitelist", UNSET)),
     )
 
 
@@ -242,6 +252,23 @@ def _as_optional_bool(value: Any) -> bool | None | object:
     if isinstance(value, str):
         return value.lower() in {"1", "true", "yes", "on"}
     return bool(value)
+
+
+def _as_optional_int_tuple(name: str, value: Any) -> tuple[int, ...] | None | object:
+    if value is UNSET:
+        return UNSET
+    if value is None:
+        return None
+    if not isinstance(value, (list, tuple)):
+        raise ValueError(f"{name} must be a list of ids")
+    return tuple(int(item) for item in value)
+
+
+def _env_int_tuple(name: str) -> tuple[int, ...]:
+    raw = os.getenv(name)
+    if not raw:
+        return ()
+    return tuple(int(part) for part in (p.strip() for p in raw.split(",")) if part)
 
 
 def _as_optional_action_high(value: Any) -> ActionHigh | None | object:
@@ -320,6 +347,8 @@ def resolve_settings(base: Settings, guild_id: int) -> ResolvedSettings:
             debug_logs=base.debug_logs,
             download_timeout_s=base.download_timeout_s,
             max_image_bytes=base.max_image_bytes,
+            channel_whitelist=base.channel_whitelist,
+            role_whitelist=base.role_whitelist,
         )
 
     action_high = base.action_high
@@ -404,6 +433,16 @@ def resolve_settings(base: Settings, guild_id: int) -> ResolvedSettings:
             overrides.max_image_bytes,
             base.max_image_bytes,
         ),
+        channel_whitelist=_resolve_required(
+            "channel_whitelist",
+            overrides.channel_whitelist,
+            base.channel_whitelist,
+        ),
+        role_whitelist=_resolve_required(
+            "role_whitelist",
+            overrides.role_whitelist,
+            base.role_whitelist,
+        ),
     )
 
 
@@ -453,6 +492,8 @@ def load_settings() -> Settings:
         debug_logs=_env_bool("DEBUG_LOGS", False),
         download_timeout_s=_env_float("DOWNLOAD_TIMEOUT_S", 8.0),
         max_image_bytes=_env_int("MAX_IMAGE_BYTES", 5_000_000),
+        channel_whitelist=_env_int_tuple("CHANNEL_WHITELIST"),
+        role_whitelist=_env_int_tuple("ROLE_WHITELIST"),
         multi_server_config_path=multi_server_config_path,
         multi_server_config=multi_server_config,
     )

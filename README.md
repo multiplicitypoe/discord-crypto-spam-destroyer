@@ -122,6 +122,8 @@ Optional (defaults shown):
 - `DEBUG_LOGS` (false) - verbose per-message logging for troubleshooting.
 - `DOWNLOAD_TIMEOUT_S` (8.0) - image download timeout.
 - `MAX_IMAGE_BYTES` (5000000) - max image size.
+- `CHANNEL_WHITELIST` (empty) - comma-separated channel ids whose messages the bot should ignore entirely. Useful for internal mod channels where scam samples are shared for discussion.
+- `ROLE_WHITELIST` (empty) - comma-separated role ids; members holding any listed role bypass all scanning. Note: a compromised whitelisted account can post spam freely, so keep this list minimal.
 - `MULTI_SERVER_CONFIG_PATH` - path to a multi-server JSON config file (advanced; see appendix below). For Docker, use a path under `data/`.
 - `TZ` (America/Los_Angeles) - optional container timezone override so that your logs are readable
 
@@ -218,7 +220,9 @@ Example JSON:
     "download_timeout_s": 8.0,
     "max_image_bytes": 5000000,
     "softban_delete_days": 1,
-    "debug_logs": false
+    "debug_logs": false,
+    "channel_whitelist": [],
+    "role_whitelist": []
   },
   "987654321098765432": {
     "mod_channel": "security-log",

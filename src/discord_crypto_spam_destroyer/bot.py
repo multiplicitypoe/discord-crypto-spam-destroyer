@@ -68,6 +68,26 @@ class CryptoSpamBot(discord.Client):
         guild = message.guild
         settings = self._get_resolved_settings(guild.id)
 
+        if settings.channel_whitelist and message.channel.id in settings.channel_whitelist:
+            if settings.debug_logs:
+                logger.info(
+                    "Message %s skipped: channel %s is whitelisted",
+                    message.id,
+                    message.channel.id,
+                )
+            return
+
+        if settings.role_whitelist:
+            author_role_ids = {role.id for role in getattr(message.author, "roles", [])}
+            if author_role_ids.intersection(settings.role_whitelist):
+                if settings.debug_logs:
+                    logger.info(
+                        "Message %s skipped: author %s has whitelisted role",
+                        message.id,
+                        message.author.id,
+                    )
+                return
+
         if settings.message_processing_delay_s > 0:
             delay_start = time.monotonic()
             await asyncio.sleep(settings.message_processing_delay_s)
