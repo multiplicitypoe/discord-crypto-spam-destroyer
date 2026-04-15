@@ -15,15 +15,18 @@ async def safe_delete(message: discord.Message) -> bool:
         return False
 
 
-def _resolve_member(guild: discord.Guild, user_id: int) -> discord.Member | None:
+async def _resolve_member(guild: discord.Guild, user_id: int) -> discord.Member | None:
     member = guild.get_member(user_id)
-    if member is None:
+    if member is not None:
+        return member
+    try:
+        return await guild.fetch_member(user_id)
+    except (discord.NotFound, discord.Forbidden, discord.HTTPException):
         return None
-    return member
 
 
 async def safe_kick(guild: discord.Guild, user_id: int, reason: str) -> bool:
-    member = _resolve_member(guild, user_id)
+    member = await _resolve_member(guild, user_id)
     if member is None:
         return False
     try:
@@ -42,7 +45,9 @@ async def safe_unban(guild: discord.Guild, user_id: int, reason: str) -> bool:
 
 
 async def safe_ban(guild: discord.Guild, user_id: int, reason: str, delete_days: int | None = None) -> bool:
-    target = guild.get_member(user_id) or discord.Object(id=user_id)
+    target: discord.Member | discord.Object | None = await _resolve_member(guild, user_id)
+    if target is None:
+        target = discord.Object(id=user_id)
     try:
         if delete_days is not None:
             await guild.ban(target, reason=reason, delete_message_days=delete_days)
