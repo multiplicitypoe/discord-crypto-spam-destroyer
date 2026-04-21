@@ -23,6 +23,7 @@ from discord_crypto_spam_destroyer.hashes.phash import compute_phashes
 from discord_crypto_spam_destroyer.hashes.store import FileHashStore, match_hashes
 from discord_crypto_spam_destroyer.moderation.actions import apply_high_action, safe_delete
 from discord_crypto_spam_destroyer.moderation.decision import decision_from_result
+from discord_crypto_spam_destroyer.moderation.whitelist import is_channel_in_list
 from discord_crypto_spam_destroyer.moderation.gating import select_images
 from discord_crypto_spam_destroyer.utils.image import is_image_attachment, read_attachment, to_data_url
 from discord_crypto_spam_destroyer.vision.openai_client import classify_images
@@ -68,25 +69,44 @@ class CryptoSpamBot(discord.Client):
         guild = message.guild
         settings = self._get_resolved_settings(guild.id)
 
-        if settings.channel_whitelist and message.channel.id in settings.channel_whitelist:
-            if settings.debug_logs:
-                logger.info(
-                    "Message %s skipped: channel %s is whitelisted",
-                    message.id,
-                    message.channel.id,
-                )
-            return
+        # --- Resolve channel hierarchy once for both lists ---
+        channel = message.channel
+        parent_id = getattr(channel, "parent_id", None)
+        try:
+            cat_id: int | None = channel.category_id  # type: ignore[union-attr]
+        except Exception:
+            cat_id = None
 
-        if settings.role_whitelist:
-            author_role_ids = {role.id for role in getattr(message.author, "roles", [])}
-            if author_role_ids.intersection(settings.role_whitelist):
+        # Ignorelist: skip entirely (no scanning)
+        if settings.channel_ignorelist:
+            ignore_match = is_channel_in_list(channel.id, parent_id, cat_id, settings.channel_ignorelist)
+            if ignore_match is not None:
                 if settings.debug_logs:
-                    logger.info(
-                        "Message %s skipped: author %s has whitelisted role",
-                        message.id,
-                        message.author.id,
-                    )
+                    logger.info("Message %s skipped: channel ignored (matched %s)", message.id, ignore_match)
                 return
+
+        if settings.role_ignorelist:
+            author_role_ids = {role.id for role in getattr(message.author, "roles", [])}
+            if author_role_ids.intersection(settings.role_ignorelist):
+                if settings.debug_logs:
+                    logger.info("Message %s skipped: author %s has ignored role", message.id, message.author.id)
+                return
+
+        # Allowlist: scan + report only (suppress delete/kick/ban)
+        is_allowlisted = False
+        if settings.channel_allowlist:
+            allow_match = is_channel_in_list(channel.id, parent_id, cat_id, settings.channel_allowlist)
+            if allow_match is not None:
+                is_allowlisted = True
+                if settings.debug_logs:
+                    logger.info("Message %s allowlisted (matched %s): scan only", message.id, allow_match)
+
+        if not is_allowlisted and settings.role_allowlist:
+            author_role_ids = {role.id for role in getattr(message.author, "roles", [])}
+            if author_role_ids.intersection(settings.role_allowlist):
+                is_allowlisted = True
+                if settings.debug_logs:
+                    logger.info("Message %s author %s has allowlisted role: scan only", message.id, message.author.id)
 
         if settings.message_processing_delay_s > 0:
             delay_start = time.monotonic()
@@ -176,15 +196,19 @@ class CryptoSpamBot(discord.Client):
         match = match_hashes(phashes, known_bad)
         if match.matched:
             logger.info("Message %s matched known bad hashes", message.id)
-            delete_result = await safe_delete(message)
+            if is_allowlisted:
+                delete_result = False
+                action_result = "report only (allowlisted)"
+            else:
+                delete_result = await safe_delete(message)
+                action_result = await self._apply_high_action_with_mod_check(
+                    guild,
+                    message.author,
+                    confidence=1.0,
+                    reason="Known bad crypto scam hash",
+                    settings=settings,
+                )
             author_roles = await self._format_author_roles(guild, message.author)
-            action_result = await self._apply_high_action_with_mod_check(
-                guild,
-                message.author,
-                confidence=1.0,
-                reason="Known bad crypto scam hash",
-                settings=settings,
-            )
 
             if self._report_allowed(guild.id, message.author.id, settings):
                 logger.info("Report sent (hash match) for message %s", message.id)
@@ -268,17 +292,23 @@ class CryptoSpamBot(discord.Client):
                 logger.info("Message %s not flagged: %s", message.id, decision.reason)
             return
 
-        delete_result = await safe_delete(message)
+        if is_allowlisted:
+            delete_result = False
+        else:
+            delete_result = await safe_delete(message)
         author_roles = await self._format_author_roles(guild, message.author)
         if decision.confidence_band.value == "high":
             logger.info("Message %s high confidence scam", message.id)
-            action_result = await self._apply_high_action_with_mod_check(
-                guild,
-                message.author,
-                confidence=vision_result.confidence,
-                reason="High confidence crypto scam",
-                settings=settings,
-            )
+            if is_allowlisted:
+                action_result = "report only (allowlisted)"
+            else:
+                action_result = await self._apply_high_action_with_mod_check(
+                    guild,
+                    message.author,
+                    confidence=vision_result.confidence,
+                    reason="High confidence crypto scam",
+                    settings=settings,
+                )
             if settings.report_high and self._report_allowed(guild.id, message.author.id, settings):
                 logger.info("Report sent (high confidence) for message %s", message.id)
                 await self._send_report(
@@ -295,7 +325,7 @@ class CryptoSpamBot(discord.Client):
                 )
             return
 
-        if settings.action_medium == "delete_only":
+        if settings.action_medium == "delete_only" and not is_allowlisted:
             if settings.debug_logs:
                 logger.info("Message %s deleted without report", message.id)
             return
