@@ -68,14 +68,25 @@ class CryptoSpamBot(discord.Client):
         guild = message.guild
         settings = self._get_resolved_settings(guild.id)
 
-        if settings.channel_whitelist and message.channel.id in settings.channel_whitelist:
-            if settings.debug_logs:
-                logger.info(
-                    "Message %s skipped: channel %s is whitelisted",
-                    message.id,
-                    message.channel.id,
-                )
-            return
+        if settings.channel_whitelist:
+            wl = settings.channel_whitelist
+            channel = message.channel
+            matched_id = None
+            if channel.id in wl:
+                matched_id = channel.id
+            elif getattr(channel, "parent_id", None) in wl:
+                matched_id = channel.parent_id
+            elif getattr(channel, "category_id", None) in wl:
+                matched_id = channel.category_id
+            if matched_id is not None:
+                if settings.debug_logs:
+                    logger.info(
+                        "Message %s skipped: channel %s whitelisted (matched %s)",
+                        message.id,
+                        channel.id,
+                        matched_id,
+                    )
+                return
 
         if settings.role_whitelist:
             author_role_ids = {role.id for role in getattr(message.author, "roles", [])}
