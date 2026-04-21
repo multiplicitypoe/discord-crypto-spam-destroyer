@@ -122,8 +122,10 @@ Optional (defaults shown):
 - `DEBUG_LOGS` (false) - verbose per-message logging for troubleshooting.
 - `DOWNLOAD_TIMEOUT_S` (8.0) - image download timeout.
 - `MAX_IMAGE_BYTES` (5000000) - max image size.
-- `CHANNEL_WHITELIST` (empty) - comma-separated channel ids whose messages the bot should ignore entirely. Useful for internal mod channels where scam samples are shared for discussion.
-- `ROLE_WHITELIST` (empty) - comma-separated role ids; members holding any listed role bypass all scanning. Note: a compromised whitelisted account can post spam freely, so keep this list minimal.
+- `CHANNEL_ALLOWLIST` (empty) - comma-separated channel ids where the bot scans but only reports (no delete, kick, or ban). Good for evaluation and channels shared by non-mod team members. Threads and forum posts inherit from their parent channel, and channels inherit from their category — add a category id to cover everything inside it.
+- `CHANNEL_IGNORELIST` (empty) - comma-separated channel ids the bot ignores entirely (no scanning). Same inheritance rules as allowlist. `CHANNEL_WHITELIST` is a deprecated alias for this.
+- `ROLE_ALLOWLIST` (empty) - comma-separated role ids; members holding any listed role are scanned but only reported (no delete, kick, or ban).
+- `ROLE_IGNORELIST` (empty) - comma-separated role ids; members holding any listed role bypass all scanning. `ROLE_WHITELIST` is a deprecated alias for this.
 - `MULTI_SERVER_CONFIG_PATH` - path to a multi-server JSON config file (advanced; see appendix below). For Docker, use a path under `data/`.
 - `TZ` (America/Los_Angeles) - optional container timezone override so that your logs are readable
 
@@ -221,8 +223,10 @@ Example JSON:
     "max_image_bytes": 5000000,
     "softban_delete_days": 1,
     "debug_logs": false,
-    "channel_whitelist": [],
-    "role_whitelist": []
+    "channel_allowlist": [],
+    "channel_ignorelist": [],
+    "role_allowlist": [],
+    "role_ignorelist": []
   },
   "987654321098765432": {
     "mod_channel": "security-log",
