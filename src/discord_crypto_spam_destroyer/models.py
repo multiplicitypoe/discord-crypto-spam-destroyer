@@ -37,3 +37,6 @@ class Decision:
 class HashMatch:
     matched: bool
     matched_hashes: Sequence[str]
+    # Images in the same post that are not on the denylist yet. A post is caught
+    # on one image but usually carries several.
+    unmatched_hashes: Sequence[str] = ()

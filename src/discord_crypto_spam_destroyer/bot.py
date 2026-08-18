@@ -195,7 +195,13 @@ class CryptoSpamBot(discord.Client):
         known_bad = self.hash_store.load()
         match = match_hashes(phashes, known_bad)
         if match.matched:
-            logger.info("Message %s matched known bad hashes", message.id)
+            logger.info(
+                "Message %s matched known bad hashes (%d of %d images known, %d new)",
+                message.id,
+                len(match.matched_hashes),
+                len(phashes),
+                len(match.unmatched_hashes),
+            )
             if is_allowlisted:
                 delete_result = False
                 action_result = "report only (allowlisted)"
@@ -209,6 +215,11 @@ class CryptoSpamBot(discord.Client):
                     settings=settings,
                 )
             author_roles = await self._format_author_roles(guild, message.author)
+            logger.info(
+                "Message %s action outcome: %s",
+                message.id,
+                self._format_action_taken(delete_result, action_result),
+            )
 
             if self._report_allowed(guild.id, message.author.id, settings):
                 logger.info("Report sent (hash match) for message %s", message.id)
@@ -218,9 +229,14 @@ class CryptoSpamBot(discord.Client):
                     vision_result=None,
                     downloaded=downloaded,
                     all_hashes=phashes,
-                    reason_override="Known bad hash match",
+                    reason_override=(
+                        "Known bad hash match "
+                        f"({len(match.matched_hashes)} of {len(phashes)} images already known)"
+                    ),
                     action_taken=self._format_action_taken(delete_result, action_result),
-                    allow_hash_add=False,
+                    # The rest of the post is usually not on the list yet, so
+                    # leave the button available for those images too.
+                    allow_hash_add=bool(match.unmatched_hashes),
                     kick_disabled=self._should_disable_kick(action_result),
                     action_suggestion_override="No action necessary",
                     author_roles_override=author_roles,
@@ -309,6 +325,11 @@ class CryptoSpamBot(discord.Client):
                     reason="High confidence crypto scam",
                     settings=settings,
                 )
+            logger.info(
+                "Message %s action outcome: %s",
+                message.id,
+                self._format_action_taken(delete_result, action_result),
+            )
             if settings.report_high and self._report_allowed(guild.id, message.author.id, settings):
                 logger.info("Report sent (high confidence) for message %s", message.id)
                 await self._send_report(
