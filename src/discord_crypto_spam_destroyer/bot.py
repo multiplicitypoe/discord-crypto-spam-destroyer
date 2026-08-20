@@ -17,6 +17,7 @@ from discord_crypto_spam_destroyer.discord_ui.mod_report import (
     build_indicator_text,
     build_mod_files,
     build_report_embed,
+    suggested_next_step,
 )
 from discord_crypto_spam_destroyer.discord_ui.report_store import ReportRecord, ReportStore
 from discord_crypto_spam_destroyer.hashes.phash import compute_phashes
@@ -238,7 +239,7 @@ class CryptoSpamBot(discord.Client):
                     # leave the button available for those images too.
                     allow_hash_add=bool(match.unmatched_hashes),
                     kick_disabled=self._should_disable_kick(action_result),
-                    action_suggestion_override="No action necessary",
+                    needs_review=False,
                     author_roles_override=author_roles,
                 )
             return
@@ -341,7 +342,7 @@ class CryptoSpamBot(discord.Client):
                     action_taken=self._format_action_taken(delete_result, action_result),
                     allow_hash_add=True,
                     kick_disabled=self._should_disable_kick(action_result),
-                    action_suggestion_override="Add hashes",
+                    needs_review=False,
                     author_roles_override=author_roles,
                 )
             return
@@ -362,7 +363,7 @@ class CryptoSpamBot(discord.Client):
                 action_taken=self._format_action_taken(delete_result, None),
                 allow_hash_add=True,
                 kick_disabled=False,
-                action_suggestion_override="Review and decide",
+                needs_review=True,
                 author_roles_override=author_roles,
             )
 
@@ -517,7 +518,7 @@ class CryptoSpamBot(discord.Client):
         action_taken: str = "none",
         allow_hash_add: bool = True,
         kick_disabled: bool = False,
-        action_suggestion_override: str | None = None,
+        needs_review: bool = False,
         author_roles_override: str | None = None,
     ) -> None:
         if message.guild is None:
@@ -539,9 +540,17 @@ class CryptoSpamBot(discord.Client):
             indicators = "none"
             confidence = 1.0
             reasons = [reason_override or "Known bad hash"]
-        action_suggestion = action_suggestion_override or (
-            f"/kick {author.id}" if settings.action_high == "kick" else f"/ban {author.id}"
+        # What is left to do, worked out from the state rather than fixed at the
+        # call site. Saying "no action necessary" while images were still
+        # missing from the denylist hid the one thing worth doing.
+        try:
+            known = self.hash_store.load()
+        except Exception:
+            known = set()
+        new_hash_count = (
+            sum(1 for phash in all_hashes if phash not in known) if allow_hash_add else 0
         )
+        action_suggestion = suggested_next_step(new_hash_count, needs_review)
         author_roles = author_roles_override or await self._format_author_roles(message.guild, author)
         embed = build_report_embed(
             message,
@@ -566,6 +575,7 @@ class CryptoSpamBot(discord.Client):
             kick_disabled=kick_disabled,
             report_store=self.report_store,
             report_record=None,
+            new_hashes=new_hash_count,
         )
         view = ReportView(context, timeout=None)
         files = build_mod_files(downloaded)

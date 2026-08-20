@@ -14,6 +14,36 @@ from discord_crypto_spam_destroyer.discord_ui.report_store import ReportRecord, 
 logger = logging.getLogger("discord_crypto_spam_destroyer")
 
 
+def hash_add_label(new_count: int) -> str:
+    """What the add button says.
+
+    Carrying the count means a moderator knows the size of what they are about
+    to do before pressing it, rather than after.
+    """
+    if new_count == 1:
+        return "Add 1 new hash"
+    return f"Add {new_count} new hashes"
+
+
+def suggested_next_step(new_hashes: int, needs_review: bool) -> str:
+    """The one line telling a moderator what is actually left to do.
+
+    The post is already deleted by the time any of these cards exist, so the
+    only outstanding question is usually whether the denylist is missing
+    anything. Saying "no action necessary" while images were still missing hid
+    the one thing worth doing.
+    """
+    if new_hashes:
+        images = "1 image" if new_hashes == 1 else f"{new_hashes} images"
+        missing = f"{images} not on the denylist yet"
+        if needs_review:
+            return f"Check this is a scam, then add the {missing}"
+        return f"Add the {missing}"
+    if needs_review:
+        return "Check this is a scam. Every image is already on the denylist"
+    return "Nothing outstanding. Every image is already on the denylist"
+
+
 @dataclass
 class ReportContext:
     guild: discord.Guild
@@ -28,6 +58,11 @@ class ReportContext:
     kick_disabled: bool
     report_store: ReportStore
     report_record: ReportRecord | None
+    # How many of this post's images were new when the card was posted. None on
+    # a card restored after a restart: the buttons it is already showing were
+    # decided when it went up, and redrawing them all on every restart costs
+    # more than it is worth.
+    new_hashes: int | None = None
 
 
 class ReportView(discord.ui.View):
@@ -38,13 +73,20 @@ class ReportView(discord.ui.View):
     ) -> None:
         super().__init__(timeout=timeout)
         self.context = context
-        for child in self.children:
-            if isinstance(child, discord.ui.Button) and child.label == "Kick":
+        new_hashes = context.new_hashes
+        for child in list(self.children):
+            if not isinstance(child, discord.ui.Button):
+                continue
+            if child.label == "Kick":
                 child.disabled = context.kick_disabled
-            if isinstance(child, discord.ui.Button) and child.label == "Add Hashes":
-                child.disabled = not context.allow_hash_add
-                if not context.allow_hash_add:
-                    child.label = "Hashes already known"
+            if child.custom_id == "report_add_hashes":
+                # Nothing to add means no button at all, rather than a dead one
+                # labelled after the reason it cannot be pressed. A restored
+                # card has no count, so it keeps whatever it was posted with.
+                if not context.allow_hash_add or new_hashes == 0:
+                    self.remove_item(child)
+                elif new_hashes:
+                    child.label = hash_add_label(new_hashes)
 
     async def _ensure_mod_or_kick_or_ban(self, interaction: discord.Interaction) -> bool:
         if not interaction.user or not isinstance(interaction.user, discord.Member):
@@ -139,7 +181,7 @@ class ReportView(discord.ui.View):
         await self._finalize_action(interaction, result)
 
     @discord.ui.button(
-        label="No action necessary",
+        label="Dismiss",
         style=discord.ButtonStyle.secondary,
         custom_id="report_ignore",
     )
@@ -148,12 +190,19 @@ class ReportView(discord.ui.View):
         interaction: discord.Interaction,
         button: discord.ui.Button,
     ) -> None:
+        """Close the card without adding anything.
+
+        Named for what the moderator is doing rather than for the advice, which
+        is what "No action necessary" was: a button with the same words as the
+        suggestion above it.
+        """
         if not await self._ensure_mod_or_kick_or_ban(interaction):
             return
-        logger.info("Mod action: no action necessary pressed by %s", interaction.user)
-        await self._finalize_action(interaction, "No action necessary")
+        logger.info("Mod action: dismissed by %s", interaction.user)
+        await self._finalize_action(interaction, "Dismissed")
 
-    @discord.ui.button(label="Add Hashes", style=discord.ButtonStyle.primary, custom_id="report_add_hashes")
+    @discord.ui.button(label="Add hashes", style=discord.ButtonStyle.primary,
+                       custom_id="report_add_hashes")
     async def add_hash_button(
         self,
         interaction: discord.Interaction,
