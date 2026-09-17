@@ -4,6 +4,7 @@ import asyncio
 import logging
 import time
 from pathlib import Path
+from typing import Awaitable, Callable
 
 import discord
 from discord import app_commands
@@ -206,16 +207,19 @@ class CryptoSpamBot(discord.Client):
             if is_allowlisted:
                 delete_result = False
                 action_result = "report only (allowlisted)"
+                author_roles = await self._format_author_roles(guild, message.author)
             else:
-                delete_result = await safe_delete(message)
-                action_result = await self._apply_high_action_with_mod_check(
-                    guild,
-                    message.author,
-                    confidence=1.0,
-                    reason="Known bad crypto scam hash",
-                    settings=settings,
+                delete_result, author_roles, action_result = await self._delete_capture_roles_then_act(
+                    delete=lambda: safe_delete(message),
+                    capture_roles=lambda: self._format_author_roles(guild, message.author),
+                    act=lambda: self._apply_high_action_with_mod_check(
+                        guild,
+                        message.author,
+                        confidence=1.0,
+                        reason="Known bad crypto scam hash",
+                        settings=settings,
+                    ),
                 )
-            author_roles = await self._format_author_roles(guild, message.author)
             logger.info(
                 "Message %s action outcome: %s",
                 message.id,
@@ -892,6 +896,25 @@ class CryptoSpamBot(discord.Client):
             logger.error("Missing required settings for guild(s): %s", missing_ids)
             await self.close()
             raise RuntimeError("Missing required settings for guild(s): " + missing_ids)
+
+    async def _delete_capture_roles_then_act(
+        self,
+        *,
+        delete: Callable[[], Awaitable[bool]],
+        capture_roles: Callable[[], Awaitable[str]],
+        act: Callable[[], Awaitable[str]],
+    ) -> tuple[bool, str, str]:
+        """Look up the author's roles before acting, never after.
+
+        A kick, ban, or softban removes the author from the guild. A role
+        lookup that runs after one of those genuinely finds nothing -- it's
+        not a permissions problem, the member is just gone -- which is why
+        report cards for auto-actioned posts were showing "(roles unknown)".
+        """
+        delete_result = await delete()
+        author_roles = await capture_roles()
+        action_result = await act()
+        return delete_result, author_roles, action_result
 
     async def _format_author_roles(self, guild: discord.Guild, author: discord.abc.User) -> str:
         member = await self._get_member(guild, author.id)
