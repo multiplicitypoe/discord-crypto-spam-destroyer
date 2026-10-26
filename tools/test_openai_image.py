@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
+from discord_crypto_spam_destroyer.config import DEFAULT_OPENAI_MODEL
 from discord_crypto_spam_destroyer.vision.openai_client import classify_images
 from discord_crypto_spam_destroyer.utils.image import DownloadedImage, to_data_url
 
@@ -20,7 +21,7 @@ def main() -> None:
         url=str(image_path),
     )
     data_url, *_ = to_data_url(image, 512)
-    result = classify_images(api_key, "gpt-4.1-mini", [data_url], "low")
+    result = classify_images(api_key, os.getenv("OPENAI_MODEL", DEFAULT_OPENAI_MODEL), [data_url], "low")
     print(result)
 
 

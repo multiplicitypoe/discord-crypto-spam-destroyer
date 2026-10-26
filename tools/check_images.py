@@ -5,10 +5,12 @@ import sys
 from pathlib import Path
 
 try:
+    from discord_crypto_spam_destroyer.config import DEFAULT_OPENAI_MODEL
     from discord_crypto_spam_destroyer.vision.openai_client import classify_images
     from discord_crypto_spam_destroyer.utils.image import DownloadedImage, to_data_url
 except ModuleNotFoundError:
     sys.path.append(str(Path("src").resolve()))
+    from discord_crypto_spam_destroyer.config import DEFAULT_OPENAI_MODEL
     from discord_crypto_spam_destroyer.vision.openai_client import classify_images
     from discord_crypto_spam_destroyer.utils.image import DownloadedImage, to_data_url
 
@@ -42,7 +44,7 @@ def main() -> None:
         )
         data_url, *_ = to_data_url(image, 512)
         try:
-            result = classify_images(api_key, "gpt-4.1-mini", [data_url], "low")
+            result = classify_images(api_key, os.getenv("OPENAI_MODEL", DEFAULT_OPENAI_MODEL), [data_url], "low")
         except Exception as exc:
             print(f"{path.name}: ERROR {type(exc).__name__}: {exc}")
             continue

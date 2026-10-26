@@ -14,7 +14,7 @@ These scams are repetitive, but hard to catch with the native Discord Automodera
 - Optional OpenAI vision classification for unknown images.
 - Only calls OpenAI if the message has N or more images (default 3) to keep costs down.
   - Channels listed in `FULL_SCAN_CHANNELS` skip that minimum, so every image post there goes to OpenAI.
-  - This uses`gpt-4.1-mini` by default, which analyzes ~30 requests per $0.01 after automatic resizing.
+  - This uses `gpt-6-luna` by default with reasoning off, which analyzes about 100 images per $0.01 after automatic resizing.
 - `/add_hash` slash command lets mods upload an image to add its hash to the auto-delete/kick list.
 
 ## Screenshots
@@ -75,7 +75,7 @@ Discord bot token:
 OpenAI API key (optional if using hash-only mode):
 - https://platform.openai.com/api-keys
 - Create a key and paste it into `.env`
-- If you are using restricted keys, enable `chat.completions` request access and make sure the key can call `gpt-4.1-mini`
+- If you are using restricted keys, enable `chat.completions` request access and make sure the key can call `gpt-6-luna`
 
 Do not forget to copy your mod channel ID and mod role ID (right-click the channel or role -> Copy ID).
 
@@ -102,7 +102,8 @@ Required:
 Optional (defaults shown):
 
 - `OPENAI_API_KEY` - **Highly recommended**. OpenAI key for vision classification.
-- `OPENAI_MODEL` (gpt-4.1-mini) - model for image classification. On low-detail 512px images, `gpt-4.1-mini` is substantially cheaper in practice than `gpt-4o-mini`.
+- `OPENAI_MODEL` (gpt-6-luna) - model for image classification. `gpt-4.x` models run at temperature 0. `gpt-5` and `gpt-6` models run with reasoning effort `none`.
+- `OPENAI_REASONING_EFFORT` (none) - reasoning effort for `gpt-5` and `gpt-6` models. Leave it at `none` unless you switch to a model that does not accept it.
 - `OPENAI_IMAGE_DETAIL` (low) - OpenAI vision detail level. `low` is faster/cheaper; `high` can be slower but more accurate on tiny text.
 - `OPENAI_MAX_IMAGE_DIM` (512) - resizes images before sending to OpenAI; lower sizes are faster/cheaper, `0` disables resizing.
 - `HASH_ONLY_MODE` (false) - skip OpenAI and use hash denylist only.
@@ -217,7 +218,7 @@ Example JSON:
     "report_high": true,
     "report_cooldown_s": 20.0,
     "hash_only_mode": false,
-    "openai_model": "gpt-4.1-mini",
+    "openai_model": "gpt-6-luna",
     "message_processing_delay_s": 1.5,
     "min_image_count": 3,
     "max_images_to_analyze": 4,
