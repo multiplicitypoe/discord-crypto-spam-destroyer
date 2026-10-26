@@ -13,6 +13,7 @@ These scams are repetitive, but hard to catch with the native Discord Automodera
 - Deletes scams and optionally kicks, bans, softbans (ban+unban) based on your config, or just reports to a configured mod channel
 - Optional OpenAI vision classification for unknown images.
 - Only calls OpenAI if the message has N or more images (default 3) to keep costs down.
+  - Channels listed in `FULL_SCAN_CHANNELS` skip that minimum, so every image post there goes to OpenAI.
   - This uses`gpt-4.1-mini` by default, which analyzes ~30 requests per $0.01 after automatic resizing.
 - `/add_hash` slash command lets mods upload an image to add its hash to the auto-delete/kick list.
 
@@ -105,7 +106,7 @@ Optional (defaults shown):
 - `OPENAI_IMAGE_DETAIL` (low) - OpenAI vision detail level. `low` is faster/cheaper; `high` can be slower but more accurate on tiny text.
 - `OPENAI_MAX_IMAGE_DIM` (512) - resizes images before sending to OpenAI; lower sizes are faster/cheaper, `0` disables resizing.
 - `HASH_ONLY_MODE` (false) - skip OpenAI and use hash denylist only.
-- `MIN_IMAGE_COUNT` (3) - min images required before OpenAI is called. Hash checks still run on any message with images.
+- `MIN_IMAGE_COUNT` (3) - min images required before OpenAI is called. Hash checks still run on any message with images. Channels in `FULL_SCAN_CHANNELS` are exempt.
 - `MAX_IMAGES_TO_ANALYZE` (4) - cap on images analyzed per message.
 - `PARALLEL_IMAGE_CLASSIFICATION` (false) - when true, classifies all selected images at once for speed; Costs **3x as much** if true. When false, runs sequentially with early-exit on high-confidence scams to reduce costs and still works fine for the common bot waves
 - `KNOWN_BAD_HASH_PATH` (data/bad_hashes.txt) - denylist storage path.
@@ -126,6 +127,7 @@ Optional (defaults shown):
 - `CHANNEL_IGNORELIST` (empty) - comma-separated channel ids the bot ignores entirely (no scanning). Same inheritance rules as allowlist. `CHANNEL_WHITELIST` is a deprecated alias for this.
 - `ROLE_ALLOWLIST` (empty) - comma-separated role ids; members holding any listed role are scanned but only reported (no delete, kick, or ban).
 - `ROLE_IGNORELIST` (empty) - comma-separated role ids; members holding any listed role bypass all scanning. `ROLE_WHITELIST` is a deprecated alias for this.
+- `FULL_SCAN_CHANNELS` (empty) is a comma-separated list of channel ids where every post with an image is sent to OpenAI, whatever its image count. Use it for the channel where scam bots post most, since a bot's first post often has only one or two images. Hash checks and the other settings behave as usual, and `MAX_IMAGES_TO_ANALYZE` still caps images per post. Threads and forum posts inherit from their parent channel, and channels inherit from their category, like the allowlist. The bot logs each listed channel at startup and warns about one it cannot find.
 - `MULTI_SERVER_CONFIG_PATH` - path to a multi-server JSON config file (advanced; see appendix below). For Docker, use a path under `data/`.
 - `TZ` (America/Los_Angeles) - optional container timezone override so that your logs are readable
 
@@ -226,7 +228,8 @@ Example JSON:
     "channel_allowlist": [],
     "channel_ignorelist": [],
     "role_allowlist": [],
-    "role_ignorelist": []
+    "role_ignorelist": [],
+    "full_scan_channels": []
   },
   "987654321098765432": {
     "mod_channel": "security-log",

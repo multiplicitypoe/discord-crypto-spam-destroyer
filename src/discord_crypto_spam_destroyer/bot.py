@@ -26,7 +26,7 @@ from discord_crypto_spam_destroyer.hashes.store import FileHashStore, match_hash
 from discord_crypto_spam_destroyer.moderation.actions import apply_high_action, safe_delete
 from discord_crypto_spam_destroyer.moderation.decision import decision_from_result
 from discord_crypto_spam_destroyer.moderation.whitelist import is_channel_in_list
-from discord_crypto_spam_destroyer.moderation.gating import select_images
+from discord_crypto_spam_destroyer.moderation.gating import min_images_for_channel, select_images
 from discord_crypto_spam_destroyer.utils.image import is_image_attachment, read_attachment, to_data_url
 from discord_crypto_spam_destroyer.vision.openai_client import classify_images
 
@@ -109,6 +109,15 @@ class CryptoSpamBot(discord.Client):
                 is_allowlisted = True
                 if settings.debug_logs:
                     logger.info("Message %s author %s has allowlisted role: scan only", message.id, message.author.id)
+
+        # Full-scan channel: the OpenAI scan runs on every image post here, not
+        # only on posts with MIN_IMAGE_COUNT or more images. Hash checks run
+        # everywhere regardless.
+        min_images = min_images_for_channel(
+            settings.min_image_count, channel.id, parent_id, cat_id, settings.full_scan_channels
+        )
+        if settings.debug_logs and min_images != settings.min_image_count:
+            logger.info("Message %s is in a full-scan channel: scanning from %s image", message.id, min_images)
 
         if settings.message_processing_delay_s > 0:
             delay_start = time.monotonic()
@@ -255,7 +264,7 @@ class CryptoSpamBot(discord.Client):
 
         selection = select_images(
             [a.url for a in attachments],
-            settings.min_image_count,
+            min_images,
             settings.max_images_to_analyze,
         )
         if not selection.qualifies:
@@ -263,7 +272,7 @@ class CryptoSpamBot(discord.Client):
                 logger.info(
                     "Message %s skipped: need %s images, got %s",
                     message.id,
-                    settings.min_image_count,
+                    min_images,
                     selection.total_images,
                 )
             return
@@ -891,6 +900,19 @@ class CryptoSpamBot(discord.Client):
                 missing_fields.append("MOD_ROLE_ID")
             if missing_fields:
                 missing.append(f"{guild.id} ({', '.join(missing_fields)})")
+            for channel_id in resolved.full_scan_channels:
+                if guild.get_channel(channel_id) is None and guild.get_thread(channel_id) is None:
+                    logger.warning(
+                        "Guild %s: full-scan channel %s was not found; check FULL_SCAN_CHANNELS",
+                        guild.id,
+                        channel_id,
+                    )
+                else:
+                    logger.info(
+                        "Guild %s: scanning every image post in channel %s (no minimum image count)",
+                        guild.id,
+                        channel_id,
+                    )
         if missing:
             missing_ids = ", ".join(missing)
             logger.error("Missing required settings for guild(s): %s", missing_ids)

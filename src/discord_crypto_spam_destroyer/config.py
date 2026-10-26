@@ -39,6 +39,7 @@ MULTI_SERVER_ALLOWED_KEYS = {
     "channel_ignorelist",
     "role_allowlist",
     "role_ignorelist",
+    "full_scan_channels",
     # Deprecated aliases (mapped to ignorelist at parse time)
     "channel_whitelist",
     "role_whitelist",
@@ -78,6 +79,7 @@ class Settings:
     role_ignorelist: tuple[int, ...]
     multi_server_config_path: str | None
     multi_server_config: dict[int, "SettingsOverrides"]
+    full_scan_channels: tuple[int, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -109,6 +111,7 @@ class ResolvedSettings:
     channel_ignorelist: tuple[int, ...]
     role_allowlist: tuple[int, ...]
     role_ignorelist: tuple[int, ...]
+    full_scan_channels: tuple[int, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -139,6 +142,7 @@ class SettingsOverrides:
     channel_ignorelist: tuple[int, ...] | None | object = UNSET
     role_allowlist: tuple[int, ...] | None | object = UNSET
     role_ignorelist: tuple[int, ...] | None | object = UNSET
+    full_scan_channels: tuple[int, ...] | None | object = UNSET
 
 
 def _env(name: str, default: str) -> str:
@@ -235,6 +239,9 @@ def _parse_multi_server_overrides(payload: dict[str, Any]) -> SettingsOverrides:
         role_ignorelist=_as_optional_int_tuple(
             "role_ignorelist",
             _first_set(payload, "role_ignorelist", "role_whitelist"),
+        ),
+        full_scan_channels=_as_optional_int_tuple(
+            "full_scan_channels", payload.get("full_scan_channels", UNSET),
         ),
     )
 
@@ -382,6 +389,7 @@ def resolve_settings(base: Settings, guild_id: int) -> ResolvedSettings:
             channel_ignorelist=base.channel_ignorelist,
             role_allowlist=base.role_allowlist,
             role_ignorelist=base.role_ignorelist,
+            full_scan_channels=base.full_scan_channels,
         )
 
     action_high = base.action_high
@@ -486,6 +494,11 @@ def resolve_settings(base: Settings, guild_id: int) -> ResolvedSettings:
             overrides.role_ignorelist,
             base.role_ignorelist,
         ),
+        full_scan_channels=_resolve_required(
+            "full_scan_channels",
+            overrides.full_scan_channels,
+            base.full_scan_channels,
+        ),
     )
 
 
@@ -541,4 +554,5 @@ def load_settings() -> Settings:
         role_ignorelist=_env_int_tuple("ROLE_IGNORELIST") or _env_int_tuple("ROLE_WHITELIST"),
         multi_server_config_path=multi_server_config_path,
         multi_server_config=multi_server_config,
+        full_scan_channels=_env_int_tuple("FULL_SCAN_CHANNELS"),
     )
