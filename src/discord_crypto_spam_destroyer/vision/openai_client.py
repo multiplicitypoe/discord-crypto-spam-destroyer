@@ -17,6 +17,7 @@ Treat an image as part of a scam when it shows any of these:
 - An online casino, gambling, betting or crypto gambling site: account or profile pages, VIP, rakeback or bonus screens, promo or bonus codes, deposit and withdraw pages, game lobbies, win screenshots.
 - A withdrawal, payout or transfer success screen, receipt, or blockchain transaction detail (USDT, BTC, ETH and similar), especially with a large amount.
 - A crypto exchange, wallet, trading app or bank screenshot with large balances, deposits, withdrawals or profit figures (Binance, Coinbase, Bybit, Trust Wallet, Kraken, MetaMask and similar).
+- A crypto trading performance or profit recap (profit and loss, win rate, return percentage, balance growth), even with no pitch or contact details.
 - A screenshot of a tweet, X post, Telegram, WhatsApp or other chat that promotes trading, investing, signals, mentorship, giveaways, airdrops, passive income or guaranteed returns, or that tells people to message someone.
 - A named handle (@name), phone number, link, referral code or QR code inviting people to join or contact someone about making money.
 - Proof of profit imagery: stacks of cash, luxury cars, watches, or lifestyle photos presented as winnings or trading results, or text like "turned $500 into $10,000".

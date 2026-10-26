@@ -40,7 +40,7 @@ def test_reasoning_effort_can_be_changed(monkeypatch) -> None:
 
 
 def test_the_prompt_names_the_scams_seen_in_the_server() -> None:
-    for phrase in ("casino", "withdrawal", "rakeback", "tweet", "Telegram", "Path of Exile"):
+    for phrase in ("casino", "withdrawal", "rakeback", "profit and loss", "tweet", "Telegram", "Path of Exile"):
         assert phrase in SYSTEM_PROMPT
 
 
