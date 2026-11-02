@@ -82,6 +82,7 @@ class Settings:
     multi_server_config_path: str | None
     multi_server_config: dict[int, "SettingsOverrides"]
     full_scan_channels: tuple[int, ...] = ()
+    default_bad_hash_path: str = "data/default_bad_hashes.txt"
 
 
 @dataclass(frozen=True)
@@ -557,4 +558,5 @@ def load_settings() -> Settings:
         multi_server_config_path=multi_server_config_path,
         multi_server_config=multi_server_config,
         full_scan_channels=_env_int_tuple("FULL_SCAN_CHANNELS"),
+        default_bad_hash_path=_env("DEFAULT_BAD_HASH_PATH", "data/default_bad_hashes.txt"),
     )

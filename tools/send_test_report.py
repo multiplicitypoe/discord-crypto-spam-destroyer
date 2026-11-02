@@ -63,7 +63,9 @@ class TestReportBot(discord.Client):
             message=last_message,
             author=target.author,
             images=[],
-            hash_store=FileHashStore(Path("data") / "bad_hashes.txt"),
+            hash_store=FileHashStore(
+                Path("data") / "bad_hashes.txt", Path("data") / "default_bad_hashes.txt"
+            ),
             all_hashes=[],
             mod_role_id=target.mod_role_id,
             allow_hash_add=True,

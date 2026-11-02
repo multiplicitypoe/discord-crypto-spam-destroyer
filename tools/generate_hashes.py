@@ -26,7 +26,7 @@ def load_existing_hashes(path: Path) -> set[str]:
 
 def main() -> None:
     image_dir = Path("data/known_bad_scam_images")
-    output_path = Path("data/bad_hashes.txt")
+    output_path = Path("data/default_bad_hashes.txt")
     hashes = generate_hashes(image_dir)
     existing = load_existing_hashes(output_path)
     merged = sorted(existing | hashes)

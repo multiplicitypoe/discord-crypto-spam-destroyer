@@ -41,7 +41,9 @@ class CryptoSpamBot(discord.Client):
         intents.guilds = True
         super().__init__(intents=intents)
         self.settings = settings
-        self.hash_store = FileHashStore(Path(settings.known_bad_hash_path))
+        self.hash_store = FileHashStore(
+            Path(settings.known_bad_hash_path), Path(settings.default_bad_hash_path)
+        )
         self.tree = app_commands.CommandTree(self)
         self._report_cooldown: dict[tuple[int, int], float] = {}
         self._action_cooldown: dict[tuple[int, int], float] = {}

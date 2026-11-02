@@ -110,7 +110,8 @@ Optional (defaults shown):
 - `MIN_IMAGE_COUNT` (3) - min images required before OpenAI is called. Hash checks still run on any message with images. Channels in `FULL_SCAN_CHANNELS` are exempt.
 - `MAX_IMAGES_TO_ANALYZE` (4) - cap on images analyzed per message.
 - `PARALLEL_IMAGE_CLASSIFICATION` (false) - when true, classifies all selected images at once for speed; Costs **3x as much** if true. When false, runs sequentially with early-exit on high-confidence scams to reduce costs and still works fine for the common bot waves
-- `KNOWN_BAD_HASH_PATH` (data/bad_hashes.txt) - denylist storage path.
+- `KNOWN_BAD_HASH_PATH` (data/bad_hashes.txt) - your own list, written by `/add_hash` and the Report button. Git ignores it.
+- `DEFAULT_BAD_HASH_PATH` (data/default_bad_hashes.txt) - the list shipped with this repo, read only.
 - `ACTION_HIGH` (softban) - `kick`, `ban`, `softban` (ban+unban, deletes recent messages), or `report_only` for high confidence.
 - `ACTION_MEDIUM` (delete_and_report) - `delete_and_report` or `delete_only`.
 - `ACTION_COOLDOWN_S` (60) - cooldown between auto kick/ban/softban actions for the same user; set to `0` to disable. Does not affect message deletion.
@@ -135,8 +136,10 @@ Optional (defaults shown):
 ## Slash command
 
 `/add_hash` - Upload an image to add its perceptual hash to the denylist. Use this when you spot a scam image before the model does. 
-* Hashes are saved via this Slash command and the Report embed button to the bad_hashes.txt file in your clone of this repository, assuming you start the bot with either the docker or non-docker Makefile targets. 
-* If you want to dump images you know are scams and add their hashes all at once (it will preserve ones added through Discord), drop the images in the data/known_bad_scam_images folder and run `make hashes`
+* Hashes live in two files under `data/`. `default_bad_hashes.txt` ships with this repo and changes when you pull. `bad_hashes.txt` is yours: this command and the Report button write only there, and git ignores it, so pulling never conflicts with hashes you added. The bot checks both.
+* To hash a batch of images you know are scams, drop them in `data/known_bad_scam_images` and run `make hashes`. That adds to the default list, so run it only when you are changing the repo.
+* If you maintain the repo and want hashes added through Discord to ship with it, run `make promote-hashes` and commit `data/default_bad_hashes.txt`.
+* If you upgraded from a version that tracked `data/bad_hashes.txt` and `git pull` stops over it, run `cp data/bad_hashes.txt /tmp/mine && git checkout data/bad_hashes.txt && git pull && cp /tmp/mine data/bad_hashes.txt`.
 
 
 ## Running with Docker

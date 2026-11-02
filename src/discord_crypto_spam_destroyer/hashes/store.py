@@ -41,15 +41,32 @@ class HashStore:
         raise NotImplementedError
 
 
+def _read_hashes(path: Path | None) -> set[str]:
+    if path is None or not path.exists():
+        return set()
+    content = path.read_text(encoding="utf-8")
+    return {line.strip() for line in content.splitlines() if line.strip()}
+
+
+def _write_hashes(path: Path, hashes: set[str]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("".join(f"{phash}\n" for phash in sorted(hashes)), encoding="utf-8")
+
+
 @dataclass
 class FileHashStore(HashStore):
+    """The denylist: a local list this bot writes plus an optional default list.
+
+    The default list ships with the repository and is replaced when you pull.
+    The local list is untracked and holds whatever moderators add, so pulling a
+    newer default list never conflicts with it. Matching uses both.
+    """
+
     path: Path
+    default_path: Path | None = None
 
     def load(self) -> set[str]:
-        if not self.path.exists():
-            return set()
-        content = self.path.read_text(encoding="utf-8")
-        return {line.strip() for line in content.splitlines() if line.strip()}
+        return _read_hashes(self.default_path) | _read_hashes(self.path)
 
     def add(self, phash: str) -> None:
         if is_degenerate_phash(phash):
@@ -57,13 +74,24 @@ class FileHashStore(HashStore):
             # message that happens to contain a blank image should not poison the
             # denylist, and should not see an error either.
             return
-        existing = self.load()
-        if phash in existing:
+        if phash in self.load():
             return
-        existing.add(phash)
-        sorted_hashes = sorted(existing)
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        self.path.write_text("\n".join(sorted_hashes) + "\n", encoding="utf-8")
+        _write_hashes(self.path, _read_hashes(self.path) | {phash})
+
+    def promote(self) -> int:
+        """Move the local list into the default list and return how many were new.
+
+        For whoever maintains the repository: run it, then commit the default list.
+        """
+        if self.default_path is None:
+            raise ValueError("there is no default list to promote into")
+        local = _read_hashes(self.path)
+        default = _read_hashes(self.default_path)
+        new = {phash for phash in local if not is_degenerate_phash(phash)} - default
+        if new:
+            _write_hashes(self.default_path, default | new)
+        _write_hashes(self.path, _read_hashes(self.path) - local)
+        return len(new)
 
 
 def match_hashes(candidates: Iterable[str], known_bad: set[str]) -> HashMatch:

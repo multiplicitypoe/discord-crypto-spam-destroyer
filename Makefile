@@ -18,12 +18,13 @@ RUN_ARGS += $(HARDENED_ARGS)
 
 include docker.mk
 
-.PHONY: help ensure-venv install install-dev hashes test-openai test-discord test run-bot
+.PHONY: help ensure-venv install install-dev hashes promote-hashes test-openai test-discord test run-bot
 
 help:
 	@echo "make ensure-venv    - create .venv if missing"
 	@echo "make install        - install runtime deps (pip)"
-	@echo "make hashes         - generate hashes from known bad images"
+	@echo "make hashes         - add hashes of the images in data/known_bad_scam_images to the default list"
+	@echo "make promote-hashes - move hashes added through Discord into the default list, then commit it"
 	@echo "make test-openai    - run OpenAI image classification test"
 	@echo "make test-discord   - send a dummy mod report"
 	@echo "make test           - run pytest (pip)"
@@ -45,6 +46,9 @@ install-dev: ensure-venv
 
 hashes: install
 	"$(PY)" tools/generate_hashes.py
+
+promote-hashes: install
+	PYTHONPATH=src "$(PY)" tools/promote_hashes.py
 
 test-openai: install
 	bash -c 'set -a && . ./.env && set +a && PYTHONPATH=src "$(PY)" tools/check_images.py'
