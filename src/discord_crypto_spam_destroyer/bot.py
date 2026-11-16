@@ -20,7 +20,6 @@ from discord_crypto_spam_destroyer.discord_ui.mod_report import (
     ReportCard,
     attachment_names,
     build_files,
-    build_indicator_text,
     card_text,
     describe_outcome,
     suggested_next_step,
@@ -630,14 +629,8 @@ class CryptoSpamBot(discord.Client):
             await self._warn_missing_mod_channel(message.guild, settings)
             return
         if vision_result:
-            indicators = build_indicator_text(
-                vision_result.indicators.domains,
-                vision_result.indicators.amounts,
-                vision_result.indicators.wallet_addresses,
-            )
             reason = "Flagged by the OpenAI scan: " + ("; ".join(vision_result.reasons) or "no reason given")
         else:
-            indicators = None
             reason = reason_override or "Known scam image"
         # What is left to do, worked out from the state rather than fixed at the
         # call site, so a card never says "nothing to do" while images are
@@ -658,7 +651,6 @@ class CryptoSpamBot(discord.Client):
             author,
             author_roles,
             reason=reason,
-            indicators=indicators,
             suggestion=suggested_next_step(new_hash_count, needs_review),
             outcome=describe_outcome(deleted, removed_after, action_result),
             deleted=deleted,

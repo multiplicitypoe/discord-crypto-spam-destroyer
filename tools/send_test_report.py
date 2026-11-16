@@ -66,7 +66,6 @@ class TestReportBot(discord.Client):
             target.author,
             "(test roles)",
             reason="Test report: 3 of 4 images are on the denylist",
-            indicators=None,
             suggestion=suggested_next_step(1, False),
             outcome=describe_outcome(True, 0.52, "softban"),
             deleted=True,

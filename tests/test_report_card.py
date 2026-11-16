@@ -25,9 +25,8 @@ def _card(**overrides):
         channel=SimpleNamespace(mention="<#2>"),
         created_at=datetime(2026, 11, 16, 14, 30, tzinfo=timezone.utc),
     )
-    author = SimpleNamespace(mention="<@9>", name="spammer", id=9,
-                             display_avatar=SimpleNamespace(url="https://cdn.discordapp.com/a.png"))
-    args = dict(reason="Known scam image: 4 of 4 images are on the denylist", indicators=None,
+    author = SimpleNamespace(mention="<@9>", name="spammer", id=9)
+    args = dict(reason="Known scam image: 4 of 4 images are on the denylist",
                 suggestion=None, outcome=describe_outcome(True, 0.52, "softban"),
                 deleted=True, needs_review=False)
     args.update(overrides)
@@ -47,6 +46,11 @@ def test_the_card_says_how_fast_and_why_and_links_the_post():
     assert "Removed **0.52s** after it was posted · author softbanned" in text
     assert "[Crypto scam removed](https://discord.com/channels/1/2/3)" in text
     assert "4 of 4 images" in text
+
+
+def test_no_avatar_and_no_indicator_line():
+    view = ReportCard(_card(), [], _actions(0))
+    assert not any(type(item).__name__ in ("Thumbnail", "Section") for item in view.walk_children())
 
 
 def test_no_confidence_no_empty_lines():

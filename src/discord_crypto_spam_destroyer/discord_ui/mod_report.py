@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from typing import Iterable, Sequence
+from typing import Sequence
 
 import discord
 from discord import ui
@@ -83,26 +83,12 @@ def describe_outcome(deleted: bool, removed_after_s: float | None, action_result
     return f"{head} · {action}" if action else head
 
 
-def build_indicator_text(
-    domains: Iterable[str], amounts: Iterable[str], wallets: Iterable[str]
-) -> str | None:
-    parts = []
-    if domains:
-        parts.append(f"domains {', '.join(str(d) for d in domains)}")
-    if amounts:
-        parts.append(f"amounts {', '.join(str(a) for a in amounts)}")
-    if wallets:
-        parts.append(f"wallets {', '.join(str(w) for w in wallets)}")
-    return " · ".join(parts) if parts else None
-
-
 def card_text(
     message: discord.Message,
     author: discord.abc.User,
     author_roles: str,
     *,
     reason: str,
-    indicators: str | None,
     suggestion: str | None,
     outcome: str,
     deleted: bool,
@@ -111,16 +97,13 @@ def card_text(
     """Everything the card says, as plain data, so it can be stored and redrawn."""
     roles = author_roles.strip().removeprefix("(").removesuffix(")")
     channel = getattr(message.channel, "mention", "#unknown")
-    avatar = getattr(getattr(author, "display_avatar", None), "url", None)
     return {
         "title": "Crypto scam removed" if deleted else "Possible crypto scam",
         "message_url": message.jump_url,
         "author_line": f"{author.mention} · {author.name} · `{author.id}`",
         "roles": roles,
-        "avatar_url": avatar,
         "outcome": outcome,
         "reason": reason,
-        "indicators": indicators,
         "suggestion": suggestion,
         "footer": f"Posted in {channel} {discord.utils.format_dt(message.created_at, 'f')}",
         "needs_review": needs_review,
@@ -172,15 +155,11 @@ class ReportCard(ui.LayoutView):
         heading = f"### [{card['title']}]({card['message_url']})\n{card['author_line']}"
         if card.get("roles"):
             heading += f"\n-# {card['roles']}"
-        if card.get("avatar_url"):
-            header: ui.Item = ui.Section(ui.TextDisplay(heading), accessory=ui.Thumbnail(card["avatar_url"]))
-        else:
-            header = ui.TextDisplay(heading)
-
-        body = [card["outcome"], card["reason"]]
-        if card.get("indicators"):
-            body.append(f"-# {card['indicators']}")
-        children: list[ui.Item] = [header, ui.TextDisplay("\n".join(body))]
+        # No avatar: on a scam post it is the scammer's, which tells a mod nothing.
+        children: list[ui.Item] = [
+            ui.TextDisplay(heading),
+            ui.TextDisplay(f"{card['outcome']}\n{card['reason']}"),
+        ]
         if image_urls:
             children.append(ui.MediaGallery(*(discord.MediaGalleryItem(url) for url in image_urls[:10])))
         children.append(ui.TextDisplay(f"-# {card['footer']}"))
