@@ -10,9 +10,11 @@ import discord
 try:
     from discord_crypto_spam_destroyer.config import load_settings, resolve_settings
     from discord_crypto_spam_destroyer.discord_ui.mod_report import (
-        ReportContext,
-        ReportView,
-        build_report_embed,
+        HashActions,
+        ReportCard,
+        card_text,
+        describe_outcome,
+        suggested_next_step,
     )
     from discord_crypto_spam_destroyer.discord_ui.report_store import ReportStore
     from discord_crypto_spam_destroyer.hashes.store import FileHashStore
@@ -20,9 +22,11 @@ except ModuleNotFoundError:
     sys.path.append(str(Path("src").resolve()))
     from discord_crypto_spam_destroyer.config import load_settings, resolve_settings
     from discord_crypto_spam_destroyer.discord_ui.mod_report import (
-        ReportContext,
-        ReportView,
-        build_report_embed,
+        HashActions,
+        ReportCard,
+        card_text,
+        describe_outcome,
+        suggested_next_step,
     )
     from discord_crypto_spam_destroyer.discord_ui.report_store import ReportStore
     from discord_crypto_spam_destroyer.hashes.store import FileHashStore
@@ -57,36 +61,27 @@ class TestReportBot(discord.Client):
         if last_message is None:
             last_message = await target.channel.send("Test report baseline message.")
 
-        context = ReportContext(
-            guild=target.guild,
-            channel=target.channel,
-            message=last_message,
-            author=target.author,
-            images=[],
+        card = card_text(
+            last_message,
+            target.author,
+            "(test roles)",
+            reason="Test report: 3 of 4 images are on the denylist",
+            indicators=None,
+            suggestion=suggested_next_step(1, False),
+            outcome=describe_outcome(True, 0.52, "softban"),
+            deleted=True,
+            needs_review=False,
+        )
+        actions = HashActions(
             hash_store=FileHashStore(
                 Path("data") / "bad_hashes.txt", Path("data") / "default_bad_hashes.txt"
             ),
             all_hashes=[],
             mod_role_id=target.mod_role_id,
-            allow_hash_add=True,
-            kick_disabled=False,
             report_store=ReportStore(Path("data") / "report_store.json"),
-            report_record=None,
+            new_hashes=1,
         )
-
-        embed = build_report_embed(
-            last_message,
-            target.author,
-            confidence=0.75,
-            reasons=["Test report"],
-            indicators="none",
-            action_suggestion="/kick USER_ID",
-            action_taken="none",
-            author_roles="(test roles)",
-        )
-
-        view = ReportView(context)
-        await target.channel.send(embed=embed, view=view)
+        await target.channel.send(view=ReportCard(card, [], actions))
         await self.close()
 
     def run_bot(self) -> None:

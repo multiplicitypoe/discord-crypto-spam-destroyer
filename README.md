@@ -16,6 +16,7 @@ These scams are repetitive, but hard to catch with the native Discord Automodera
   - Channels listed in `FULL_SCAN_CHANNELS` skip that minimum, so every image post there goes to OpenAI.
   - This uses `gpt-6-luna` by default with reasoning off, which analyzes about 100 images per $0.01 after automatic resizing.
 - `/add_hash` slash command lets mods upload an image to add its hash to the auto-delete/kick list.
+- Posts a report card to the mod channel, built with Discord components v2: a link to the post, how many seconds after posting it was removed, why it was caught, and the images. When some of the images are not on the denylist yet, the card says so and offers an Add hashes button.
 
 ## Screenshots
 

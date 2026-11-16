@@ -4,7 +4,7 @@
 #   python -m pip install --upgrade pip pip-tools
 #   pip-compile --output-file=requirements.txt requirements.in
 
-discord-py==2.4.0
+discord-py==2.7.1
 openai==1.58.1
 pillow==10.4.0
 imagehash==4.3.1

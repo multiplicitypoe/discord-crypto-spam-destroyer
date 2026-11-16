@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Iterable
 
@@ -15,9 +15,11 @@ class ReportRecord:
     author_id: int
     mod_role_id: int | None
     allow_hash_add: bool
-    kick_disabled: bool
     all_hashes: list[str]
     created_at: float
+    # The text of a components v2 card, so it can be redrawn after a button
+    # press or a restart. None marks an older embed card.
+    card: dict | None = field(default=None, hash=False)
 
 
 class ReportStore:
@@ -38,9 +40,9 @@ class ReportStore:
                     author_id=int(item["author_id"]),
                     mod_role_id=int(item["mod_role_id"]) if item.get("mod_role_id") else None,
                     allow_hash_add=bool(item.get("allow_hash_add", True)),
-                    kick_disabled=bool(item.get("kick_disabled", False)),
                     all_hashes=list(item.get("all_hashes", [])),
                     created_at=float(item.get("created_at", time.time())),
+                    card=item.get("card"),
                 )
             )
         return records
@@ -70,9 +72,9 @@ class ReportStore:
                     "author_id": record.author_id,
                     "mod_role_id": record.mod_role_id,
                     "allow_hash_add": record.allow_hash_add,
-                    "kick_disabled": record.kick_disabled,
                     "all_hashes": record.all_hashes,
                     "created_at": record.created_at,
+                    "card": record.card,
                 }
                 for record in records
             ]

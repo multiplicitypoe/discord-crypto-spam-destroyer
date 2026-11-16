@@ -1,289 +1,290 @@
+"""The report card a moderator sees after the bot acts on a post.
+
+It is an informative card built with Discord's components v2: what was removed,
+how fast, why, and the images. The only button is "Add hashes", shown when some
+of the post's images are not on the denylist yet. Moderators pressed it about
+160 times in seven months. Kick and Ban were never pressed in 933 cards, and
+Dismiss only ever marked a card that had nothing left to do, so they are gone.
+"""
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Iterable
-
 import logging
-import discord
+from dataclasses import dataclass
+from typing import Iterable, Sequence
 
-from discord_crypto_spam_destroyer.hashes.store import FileHashStore
-from discord_crypto_spam_destroyer.moderation.actions import apply_high_action
-from discord_crypto_spam_destroyer.utils.image import DownloadedImage, build_discord_files
+import discord
+from discord import ui
+
 from discord_crypto_spam_destroyer.discord_ui.report_store import ReportRecord, ReportStore
+from discord_crypto_spam_destroyer.hashes.store import FileHashStore
+from discord_crypto_spam_destroyer.utils.image import DownloadedImage
 
 logger = logging.getLogger("discord_crypto_spam_destroyer")
 
+ADD_HASHES_ID = "report_add_hashes"
+# Buttons on the older embed cards, stripped from them when the bot restarts.
+RETIRED_BUTTON_IDS = frozenset({"report_kick", "report_ban", "report_ignore"})
+
+ACCENT_REMOVED = discord.Colour.red()
+ACCENT_REVIEW = discord.Colour.orange()
+
 
 def hash_add_label(new_count: int) -> str:
-    """What the add button says.
-
-    Carrying the count means a moderator knows the size of what they are about
-    to do before pressing it, rather than after.
-    """
+    """What the add button says, with the count, so a moderator knows the size first."""
     if new_count == 1:
         return "Add 1 new hash"
     return f"Add {new_count} new hashes"
 
 
-def suggested_next_step(new_hashes: int, needs_review: bool) -> str:
-    """The one line telling a moderator what is actually left to do.
-
-    The post is already deleted by the time any of these cards exist, so the
-    only outstanding question is usually whether the denylist is missing
-    anything. Saying "no action necessary" while images were still missing hid
-    the one thing worth doing.
-    """
+def suggested_next_step(new_hashes: int, needs_review: bool) -> str | None:
+    """What is left for a moderator to do, or None when nothing is."""
     if new_hashes:
-        images = "1 image" if new_hashes == 1 else f"{new_hashes} images"
-        missing = f"{images} not on the denylist yet"
+        missing = (
+            "the 1 image that isn't on the denylist yet"
+            if new_hashes == 1
+            else f"the {new_hashes} images that aren't on the denylist yet"
+        )
         if needs_review:
-            return f"Check this is a scam, then add the {missing}"
-        return f"Add the {missing}"
+            return f"Check this is a scam, then add {missing}"
+        return f"Add {missing}"
     if needs_review:
         return "Check this is a scam. Every image is already on the denylist"
-    return "Nothing outstanding. Every image is already on the denylist"
+    return None
+
+
+_ACTIONS = {
+    "softban": "author softbanned",
+    "ban": "author banned",
+    "kick": "author kicked",
+    "report_only": "reported only",
+    "report only": "reported only",
+    "report only (allowlisted)": "reported only (allowlisted)",
+    "no kick (author is Mod)": "author is a mod, not actioned",
+    "kick failed": "action on the author failed",
+}
+
+
+def describe_action(action_result: str | None) -> str | None:
+    if not action_result:
+        return None
+    if action_result.endswith("(cooldown)"):
+        return "author already actioned for an earlier post"
+    return _ACTIONS.get(action_result, action_result)
+
+
+def describe_outcome(deleted: bool, removed_after_s: float | None, action_result: str | None) -> str:
+    if deleted and removed_after_s is not None:
+        head = f"Removed **{removed_after_s:.2f}s** after it was posted"
+    elif deleted:
+        head = "Removed"
+    else:
+        head = "**Not removed**"
+    action = describe_action(action_result)
+    return f"{head} · {action}" if action else head
+
+
+def build_indicator_text(
+    domains: Iterable[str], amounts: Iterable[str], wallets: Iterable[str]
+) -> str | None:
+    parts = []
+    if domains:
+        parts.append(f"domains {', '.join(str(d) for d in domains)}")
+    if amounts:
+        parts.append(f"amounts {', '.join(str(a) for a in amounts)}")
+    if wallets:
+        parts.append(f"wallets {', '.join(str(w) for w in wallets)}")
+    return " · ".join(parts) if parts else None
+
+
+def card_text(
+    message: discord.Message,
+    author: discord.abc.User,
+    author_roles: str,
+    *,
+    reason: str,
+    indicators: str | None,
+    suggestion: str | None,
+    outcome: str,
+    deleted: bool,
+    needs_review: bool,
+) -> dict:
+    """Everything the card says, as plain data, so it can be stored and redrawn."""
+    roles = author_roles.strip().removeprefix("(").removesuffix(")")
+    channel = getattr(message.channel, "mention", "#unknown")
+    avatar = getattr(getattr(author, "display_avatar", None), "url", None)
+    return {
+        "title": "Crypto scam removed" if deleted else "Possible crypto scam",
+        "message_url": message.jump_url,
+        "author_line": f"{author.mention} · {author.name} · `{author.id}`",
+        "roles": roles,
+        "avatar_url": avatar,
+        "outcome": outcome,
+        "reason": reason,
+        "indicators": indicators,
+        "suggestion": suggestion,
+        "footer": f"Posted in {channel} {discord.utils.format_dt(message.created_at, 'f')}",
+        "needs_review": needs_review,
+    }
+
+
+def attachment_names(images: Sequence[DownloadedImage]) -> list[str]:
+    """Unique names, since a gallery points at attachments by name and scam posts reuse image.png."""
+    names = []
+    for index, image in enumerate(images, start=1):
+        extension = (image.filename.rsplit(".", 1)[-1] if "." in image.filename else "png").lower()
+        names.append(f"image_{index}.{extension}")
+    return names
+
+
+def build_files(images: Sequence[DownloadedImage]) -> list[discord.File]:
+    from io import BytesIO
+
+    return [
+        discord.File(fp=BytesIO(image.data), filename=name)
+        for image, name in zip(images, attachment_names(images))
+    ]
 
 
 @dataclass
-class ReportContext:
-    guild: discord.Guild
-    channel: discord.TextChannel
-    message: discord.Message
-    author: discord.abc.User
-    images: Iterable[DownloadedImage]
+class HashActions:
+    """What the Add hashes button needs to do its job and redraw the card."""
+
     hash_store: FileHashStore
     all_hashes: list[str]
     mod_role_id: int | None
-    allow_hash_add: bool
-    kick_disabled: bool
     report_store: ReportStore
-    report_record: ReportRecord | None
-    # How many of this post's images were new when the card was posted. None on
-    # a card restored after a restart: the buttons it is already showing were
-    # decided when it went up, and redrawing them all on every restart costs
-    # more than it is worth.
+    record: ReportRecord | None = None
     new_hashes: int | None = None
 
 
-class ReportView(discord.ui.View):
+class ReportCard(ui.LayoutView):
     def __init__(
         self,
-        context: ReportContext,
-        timeout: float | None = None,
+        card: dict,
+        image_urls: Sequence[str],
+        actions: HashActions | None = None,
+        note: str | None = None,
     ) -> None:
-        super().__init__(timeout=timeout)
-        self.context = context
-        new_hashes = context.new_hashes
-        for child in list(self.children):
-            if not isinstance(child, discord.ui.Button):
-                continue
-            if child.label == "Kick":
-                child.disabled = context.kick_disabled
-            if child.custom_id == "report_add_hashes":
-                # Nothing to add means no button at all, rather than a dead one
-                # labelled after the reason it cannot be pressed. A restored
-                # card has no count, so it keeps whatever it was posted with.
-                if not context.allow_hash_add or new_hashes == 0:
-                    self.remove_item(child)
-                elif new_hashes:
-                    child.label = hash_add_label(new_hashes)
+        super().__init__(timeout=None)
+        self.card = card
+        self.actions = actions
 
-    async def _ensure_mod_or_kick_or_ban(self, interaction: discord.Interaction) -> bool:
-        if not interaction.user or not isinstance(interaction.user, discord.Member):
-            await interaction.response.send_message("Permissions check failed.", ephemeral=True)
-            return False
-        if self.context.mod_role_id:
-            if any(role.id == self.context.mod_role_id for role in interaction.user.roles):
-                return True
-            if interaction.user.guild_permissions.kick_members or interaction.user.guild_permissions.ban_members:
-                return True
-            await interaction.response.send_message(
-                "Missing Mod role or kick/ban permission.", ephemeral=True
-            )
-            return False
-        if interaction.user.guild_permissions.kick_members or interaction.user.guild_permissions.ban_members:
-            return True
-        await interaction.response.send_message("Missing kick/ban permission.", ephemeral=True)
+        heading = f"### [{card['title']}]({card['message_url']})\n{card['author_line']}"
+        if card.get("roles"):
+            heading += f"\n-# {card['roles']}"
+        if card.get("avatar_url"):
+            header: ui.Item = ui.Section(ui.TextDisplay(heading), accessory=ui.Thumbnail(card["avatar_url"]))
+        else:
+            header = ui.TextDisplay(heading)
+
+        body = [card["outcome"], card["reason"]]
+        if card.get("indicators"):
+            body.append(f"-# {card['indicators']}")
+        children: list[ui.Item] = [header, ui.TextDisplay("\n".join(body))]
+        if image_urls:
+            children.append(ui.MediaGallery(*(discord.MediaGalleryItem(url) for url in image_urls[:10])))
+        children.append(ui.TextDisplay(f"-# {card['footer']}"))
+
+        if note:
+            children.append(ui.Separator())
+            children.append(ui.TextDisplay(note))
+        elif card.get("suggestion"):
+            children.append(ui.Separator())
+            children.append(ui.TextDisplay(f"**To do:** {card['suggestion']}"))
+            if actions is not None and actions.new_hashes != 0:
+                label = hash_add_label(actions.new_hashes) if actions.new_hashes else "Add hashes"
+                button: ui.Button = ui.Button(
+                    label=label, style=discord.ButtonStyle.primary, custom_id=ADD_HASHES_ID
+                )
+                button.callback = self._add_hashes
+                children.append(ui.ActionRow(button))
+
+        accent = ACCENT_REVIEW if card.get("needs_review") else ACCENT_REMOVED
+        self.add_item(ui.Container(*children, accent_colour=accent))
+
+    @property
+    def has_button(self) -> bool:
+        return any(getattr(item, "custom_id", None) == ADD_HASHES_ID for item in self.walk_children())
+
+    async def _add_hashes(self, interaction: discord.Interaction) -> None:
+        if self.actions is None or not await _is_mod(interaction, self.actions.mod_role_id):
+            return
+        result = add_new_hashes(self.actions, interaction.user)
+        image_urls = gallery_urls(interaction.message) if interaction.message else []
+        actor = interaction.user.mention if interaction.user else "Someone"
+        redrawn = ReportCard(self.card, image_urls, note=f"-# {actor}: {result}")
+        await interaction.response.edit_message(view=redrawn)
+        if self.actions.record is not None:
+            self.actions.report_store.delete_report(self.actions.record.message_id)
+        self.stop()
+
+
+class LegacyReportView(discord.ui.View):
+    """Keeps Add hashes working on embed cards posted before the redesign.
+
+    Those cards age out of the report store after a week; then this can go.
+    """
+
+    def __init__(self, actions: HashActions) -> None:
+        super().__init__(timeout=None)
+        self.actions = actions
+
+    @discord.ui.button(label="Add hashes", style=discord.ButtonStyle.primary, custom_id=ADD_HASHES_ID)
+    async def add_hash_button(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if not await _is_mod(interaction, self.actions.mod_role_id):
+            return
+        result = add_new_hashes(self.actions, interaction.user)
+        actor = interaction.user.mention if interaction.user else "Someone"
+        embed = interaction.message.embeds[0] if interaction.message and interaction.message.embeds else None
+        if embed is not None:
+            embed.add_field(name="Action taken", value=f"Action by {actor}: {result}", inline=False)
+            await interaction.response.edit_message(embed=embed, view=None)
+        else:
+            await interaction.response.edit_message(view=None)
+        if self.actions.record is not None:
+            self.actions.report_store.delete_report(self.actions.record.message_id)
+        self.stop()
+
+
+def gallery_urls(message: discord.Message) -> list[str]:
+    """The image URLs a card shows.
+
+    A components v2 message folds its uploads into the gallery, so
+    message.attachments comes back empty. The URLs are signed, and a message
+    fetched for an interaction carries fresh ones.
+    """
+    urls: list[str] = []
+
+    def walk(components) -> None:
+        for component in components or []:
+            if isinstance(component, discord.MediaGalleryComponent):
+                urls.extend(item.media.url for item in component.items)
+            walk(getattr(component, "children", None) or getattr(component, "components", None))
+
+    walk(message.components)
+    return urls or [attachment.url for attachment in message.attachments]
+
+
+def add_new_hashes(actions: HashActions, user: object) -> str:
+    existing = actions.hash_store.load()
+    new_hashes = list(dict.fromkeys(p for p in actions.all_hashes if p not in existing))
+    if not new_hashes:
+        logger.info("Mod action: add hashes pressed by %s (no-op)", user)
+        return "every image was already on the denylist"
+    for phash in new_hashes:
+        actions.hash_store.add(phash)
+    logger.info("Mod action: add hashes pressed by %s (%s added)", user, len(new_hashes))
+    return f"added {len(new_hashes)} {'hash' if len(new_hashes) == 1 else 'hashes'} to the denylist"
+
+
+async def _is_mod(interaction: discord.Interaction, mod_role_id: int | None) -> bool:
+    user = interaction.user
+    if not isinstance(user, discord.Member):
+        await interaction.response.send_message("Permissions check failed.", ephemeral=True)
         return False
-
-    async def _finalize_action(self, interaction: discord.Interaction, result: str) -> None:
-        for child in self.children:
-            if isinstance(child, discord.ui.Button):
-                child.disabled = True
-        actor = interaction.user.mention if interaction.user else "Unknown"
-        action_text = f"Action by {actor}: {result}"
-        if self.context.report_record:
-            self.context.report_store.delete_report(self.context.report_record.message_id)
-        if interaction.message and interaction.message.embeds:
-            embed = interaction.message.embeds[0]
-            updated = False
-            for index, field in enumerate(embed.fields):
-                field_name = field.name or ""
-                if field_name.lower() == "action taken":
-                    prior = field.value or "none"
-                    combined = f"{prior}, {action_text}" if prior and prior.lower() != "none" else action_text
-                    embed.set_field_at(index, name=field_name, value=combined, inline=field.inline)
-                    updated = True
-                    break
-            if not updated:
-                embed.add_field(name="Action taken", value=action_text, inline=False)
-            if interaction.response.is_done():
-                await interaction.edit_original_response(embed=embed, view=self)
-            else:
-                await interaction.response.edit_message(embed=embed, view=self)
-            return
-        content = interaction.message.content if interaction.message else ""
-        updated_content = (
-            f"{content}\n\n{action_text}" if content else action_text
-        )
-        if interaction.response.is_done():
-            await interaction.edit_original_response(content=updated_content, view=self)
-        else:
-            await interaction.response.edit_message(content=updated_content, view=self)
-
-    @discord.ui.button(label="Kick", style=discord.ButtonStyle.danger, custom_id="report_kick")
-    async def kick_button(
-        self,
-        interaction: discord.Interaction,
-        button: discord.ui.Button,
-    ) -> None:
-        if not await self._ensure_mod_or_kick_or_ban(interaction):
-            return
-        if self.context.kick_disabled:
-            await self._finalize_action(interaction, "Kick disabled for auto-actions")
-            return
-        logger.info("Mod action: kick pressed by %s", interaction.user)
-        success = await apply_high_action(
-            self.context.guild,
-            self.context.author.id,
-            "kick",
-            "Manual mod action from report",
-        )
-        result = "Kicked" if success else "Kick failed or user gone"
-        await self._finalize_action(interaction, result)
-
-    @discord.ui.button(label="Ban", style=discord.ButtonStyle.danger, custom_id="report_ban")
-    async def ban_button(
-        self,
-        interaction: discord.Interaction,
-        button: discord.ui.Button,
-    ) -> None:
-        if not await self._ensure_mod_or_kick_or_ban(interaction):
-            return
-        logger.info("Mod action: ban pressed by %s", interaction.user)
-        success = await apply_high_action(
-            self.context.guild,
-            self.context.author.id,
-            "ban",
-            "Manual mod action from report",
-        )
-        result = "Banned" if success else "Ban failed or user gone"
-        await self._finalize_action(interaction, result)
-
-    @discord.ui.button(
-        label="Dismiss",
-        style=discord.ButtonStyle.secondary,
-        custom_id="report_ignore",
-    )
-    async def ignore_button(
-        self,
-        interaction: discord.Interaction,
-        button: discord.ui.Button,
-    ) -> None:
-        """Close the card without adding anything.
-
-        Named for what the moderator is doing rather than for the advice, which
-        is what "No action necessary" was: a button with the same words as the
-        suggestion above it.
-        """
-        if not await self._ensure_mod_or_kick_or_ban(interaction):
-            return
-        logger.info("Mod action: dismissed by %s", interaction.user)
-        await self._finalize_action(interaction, "Dismissed")
-
-    @discord.ui.button(label="Add hashes", style=discord.ButtonStyle.primary,
-                       custom_id="report_add_hashes")
-    async def add_hash_button(
-        self,
-        interaction: discord.Interaction,
-        button: discord.ui.Button,
-    ) -> None:
-        if not await self._ensure_mod_or_kick_or_ban(interaction):
-            return
-        existing = self.context.hash_store.load()
-        new_hashes = [phash for phash in self.context.all_hashes if phash not in existing]
-        already_known = len(self.context.all_hashes) - len(new_hashes)
-        if not self.context.allow_hash_add:
-            logger.info("Mod action: add hashes pressed by %s (disabled)", interaction.user)
-            if not new_hashes:
-                await self._finalize_action(interaction, "Hashes already known")
-            else:
-                await self._finalize_action(interaction, "Hash add disabled")
-            return
-        if not new_hashes:
-            logger.info("Mod action: add hashes pressed by %s (no-op)", interaction.user)
-            await self._finalize_action(interaction, "Hashes already known")
-            return
-        added = 0
-        for phash in new_hashes:
-            self.context.hash_store.add(phash)
-            added += 1
-        logger.info(
-            "Mod action: add hashes pressed by %s (%s added, %s known)",
-            interaction.user,
-            added,
-            already_known,
-        )
-        added_label = "hash" if added == 1 else "hashes"
-        if already_known:
-            known_label = "hash" if already_known == 1 else "hashes"
-            result = f"Added {added} {added_label} ({already_known} already known {known_label})"
-        else:
-            result = f"Added {added} {added_label}"
-        await self._finalize_action(interaction, result)
-
-
-def build_report_embed(
-    message: discord.Message,
-    author: discord.abc.User,
-    confidence: float,
-    reasons: Iterable[str],
-    indicators: str,
-    action_suggestion: str,
-    action_taken: str,
-    author_roles: str,
-) -> discord.Embed:
-    reason_text = ", ".join(reasons) if reasons else "none"
-    suggested = f"`{action_suggestion}`" if action_suggestion.startswith("/") else action_suggestion
-    embed = discord.Embed(title="Possible crypto scam", color=discord.Color.red())
-    embed.add_field(
-        name="Author",
-        value=f"{author.mention} ({author}, {author.id}) {author_roles}",
-        inline=False,
-    )
-    embed.add_field(
-        name="Message link",
-        value=message.jump_url,
-        inline=False,
-    )
-    embed.add_field(name="Confidence", value=f"{confidence:.2f}", inline=True)
-    embed.add_field(name="Reasons", value=reason_text, inline=False)
-    embed.add_field(name="Indicators", value=indicators, inline=False)
-    embed.add_field(name="Suggested", value=suggested, inline=False)
-    embed.add_field(name="Action taken", value=action_taken, inline=False)
-    return embed
-
-
-def build_indicator_text(domains: Iterable[str], amounts: Iterable[str], wallets: Iterable[str]) -> str:
-    parts = []
-    if domains:
-        parts.append(f"domains={', '.join(str(domain) for domain in domains)}")
-    if amounts:
-        parts.append(f"amounts={', '.join(str(amount) for amount in amounts)}")
-    if wallets:
-        parts.append(f"wallets={', '.join(str(wallet) for wallet in wallets)}")
-    return " | ".join(parts) if parts else "none"
-
-
-def build_mod_files(images: Iterable[DownloadedImage]) -> list[discord.File]:
-    return build_discord_files(images)
+    if mod_role_id and any(role.id == mod_role_id for role in user.roles):
+        return True
+    if user.guild_permissions.kick_members or user.guild_permissions.ban_members:
+        return True
+    await interaction.response.send_message("Missing Mod role or kick/ban permission.", ephemeral=True)
+    return False

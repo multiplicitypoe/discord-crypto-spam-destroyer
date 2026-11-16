@@ -36,10 +36,8 @@ class TheSuggestionSaysWhatIsLeft(unittest.TestCase):
         self.assertIn("1 image", text)
         self.assertNotIn("images", text)
 
-    def test_nothing_left_says_so_plainly(self):
-        text = suggested_next_step(new_hashes=0, needs_review=False)
-        self.assertNotIn("denylist yet", text)
-        self.assertIn("Nothing", text)
+    def test_nothing_left_means_no_to_do_line(self):
+        self.assertIsNone(suggested_next_step(new_hashes=0, needs_review=False))
 
     def test_a_post_needing_a_look_asks_for_one_first(self):
         text = suggested_next_step(new_hashes=2, needs_review=True)
@@ -56,7 +54,7 @@ class TheSuggestionSaysWhatIsLeft(unittest.TestCase):
             for needs_review in (False, True):
                 self.assertNotIn(
                     "no action necessary",
-                    suggested_next_step(new_hashes, needs_review).lower(),
+                    (suggested_next_step(new_hashes, needs_review) or "").lower(),
                 )
 
 

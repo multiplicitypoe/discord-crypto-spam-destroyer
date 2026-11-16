@@ -13,11 +13,16 @@ from discord_crypto_spam_destroyer.config import ResolvedSettings, Settings, loa
 from discord_crypto_spam_destroyer.models import VisionResult
 from discord_crypto_spam_destroyer.utils.image import DownloadedImage
 from discord_crypto_spam_destroyer.discord_ui.mod_report import (
-    ReportContext,
-    ReportView,
+    ADD_HASHES_ID,
+    RETIRED_BUTTON_IDS,
+    HashActions,
+    LegacyReportView,
+    ReportCard,
+    attachment_names,
+    build_files,
     build_indicator_text,
-    build_mod_files,
-    build_report_embed,
+    card_text,
+    describe_outcome,
     suggested_next_step,
 )
 from discord_crypto_spam_destroyer.discord_ui.report_store import ReportRecord, ReportStore
@@ -251,6 +256,7 @@ class CryptoSpamBot(discord.Client):
 
             if self._report_allowed(guild.id, message.author.id, settings):
                 logger.info("Report sent (hash match) for message %s", message.id)
+                known = len(match.matched_hashes)
                 await self._send_report(
                     message,
                     message.author,
@@ -258,14 +264,15 @@ class CryptoSpamBot(discord.Client):
                     downloaded=downloaded,
                     all_hashes=phashes,
                     reason_override=(
-                        "Known bad hash match "
-                        f"({len(match.matched_hashes)} of {len(phashes)} images already known)"
+                        f"Known scam image: {known} of {len(phashes)} "
+                        f"{'image is' if len(phashes) == 1 else 'images are'} on the denylist"
                     ),
-                    action_taken=self._format_action_taken(delete_result, action_result),
+                    deleted=delete_result,
+                    action_result=action_result,
+                    timing=timing,
                     # The rest of the post is usually not on the list yet, so
                     # leave the button available for those images too.
                     allow_hash_add=bool(match.unmatched_hashes),
-                    kick_disabled=self._should_disable_kick(action_result),
                     needs_review=False,
                     author_roles_override=author_roles,
                 )
@@ -367,9 +374,10 @@ class CryptoSpamBot(discord.Client):
                     vision_result,
                     downloaded,
                     phashes,
-                    action_taken=self._format_action_taken(delete_result, action_result),
+                    deleted=delete_result,
+                    action_result=action_result,
+                    timing=timing,
                     allow_hash_add=True,
-                    kick_disabled=self._should_disable_kick(action_result),
                     needs_review=False,
                     author_roles_override=author_roles,
                 )
@@ -388,9 +396,10 @@ class CryptoSpamBot(discord.Client):
                 vision_result,
                 downloaded,
                 phashes,
-                action_taken=self._format_action_taken(delete_result, None),
+                deleted=delete_result,
+                action_result=None,
+                timing=timing,
                 allow_hash_add=True,
-                kick_disabled=False,
                 needs_review=True,
                 author_roles_override=author_roles,
             )
@@ -606,9 +615,10 @@ class CryptoSpamBot(discord.Client):
         downloaded: list[DownloadedImage],
         all_hashes: list[str],
         reason_override: str | None = None,
-        action_taken: str = "none",
+        deleted: bool = False,
+        action_result: str | None = None,
+        timing: "_Timing | None" = None,
         allow_hash_add: bool = True,
-        kick_disabled: bool = False,
         needs_review: bool = False,
         author_roles_override: str | None = None,
     ) -> None:
@@ -625,65 +635,64 @@ class CryptoSpamBot(discord.Client):
                 vision_result.indicators.amounts,
                 vision_result.indicators.wallet_addresses,
             )
-            confidence = vision_result.confidence
-            reasons = vision_result.reasons
+            reason = "Flagged by the OpenAI scan: " + ("; ".join(vision_result.reasons) or "no reason given")
         else:
-            indicators = "none"
-            confidence = 1.0
-            reasons = [reason_override or "Known bad hash"]
+            indicators = None
+            reason = reason_override or "Known scam image"
         # What is left to do, worked out from the state rather than fixed at the
-        # call site. Saying "no action necessary" while images were still
-        # missing from the denylist hid the one thing worth doing.
+        # call site, so a card never says "nothing to do" while images are
+        # still missing from the denylist.
         try:
             known = self.hash_store.load()
         except Exception:
             known = set()
         new_hash_count = (
-            sum(1 for phash in all_hashes if phash not in known) if allow_hash_add else 0
+            len({phash for phash in all_hashes if phash not in known}) if allow_hash_add else 0
         )
-        action_suggestion = suggested_next_step(new_hash_count, needs_review)
         author_roles = author_roles_override or await self._format_author_roles(message.guild, author)
-        embed = build_report_embed(
+        removed_after = None
+        if timing is not None and timing.deleted is not None:
+            removed_after = timing.deleted - timing.posted
+        card = card_text(
             message,
             author,
-            confidence,
-            reasons,
-            indicators,
-            action_suggestion,
-            action_taken,
             author_roles,
+            reason=reason,
+            indicators=indicators,
+            suggestion=suggested_next_step(new_hash_count, needs_review),
+            outcome=describe_outcome(deleted, removed_after, action_result),
+            deleted=deleted,
+            needs_review=needs_review,
         )
-        context = ReportContext(
-            guild=message.guild,
-            channel=channel,
-            message=message,
-            author=author,
-            images=downloaded,
+        actions = HashActions(
             hash_store=self.hash_store,
             all_hashes=list(all_hashes),
             mod_role_id=settings.mod_role_id,
-            allow_hash_add=allow_hash_add,
-            kick_disabled=kick_disabled,
             report_store=self.report_store,
-            report_record=None,
             new_hashes=new_hash_count,
         )
-        view = ReportView(context, timeout=None)
-        files = build_mod_files(downloaded)
-        sent_message = await channel.send(embed=embed, files=files, view=view)
-        report_record = ReportRecord(
+        view = ReportCard(
+            card,
+            [f"attachment://{name}" for name in attachment_names(downloaded)],
+            actions,
+        )
+        sent_message = await channel.send(view=view, files=build_files(downloaded))
+        if not view.has_button:
+            # Nothing to press, so nothing to restore after a restart.
+            return
+        record = ReportRecord(
             message_id=sent_message.id,
             channel_id=channel.id,
             guild_id=message.guild.id,
             author_id=author.id,
             mod_role_id=settings.mod_role_id,
             allow_hash_add=allow_hash_add,
-            kick_disabled=kick_disabled,
             all_hashes=list(all_hashes),
             created_at=time.time(),
+            card=card,
         )
-        self.report_store.save_report(report_record)
-        context.report_record = report_record
+        self.report_store.save_report(record)
+        actions.record = record
 
     async def _register_commands(self) -> None:
         command = app_commands.Command(
@@ -882,9 +891,6 @@ class CryptoSpamBot(discord.Client):
             actions.append(action_result)
         return ", ".join(actions)
 
-    def _should_disable_kick(self, action_result: str | None) -> bool:
-        return action_result in {"kick", "ban", "softban"}
-
     def _report_allowed(self, guild_id: int, user_id: int, settings: ResolvedSettings) -> bool:
         cooldown = settings.report_cooldown_s
         if cooldown <= 0:
@@ -921,6 +927,7 @@ class CryptoSpamBot(discord.Client):
         self.report_store.prune(ttl_s)
         records = self.report_store.load_reports()
         restored = 0
+        stale_cards: list[tuple[discord.Message, discord.ui.View | None]] = []
         for record in records:
             channel = await self._fetch_channel(record.channel_id)
             if not channel:
@@ -931,33 +938,47 @@ class CryptoSpamBot(discord.Client):
             except (discord.NotFound, discord.Forbidden, discord.HTTPException):
                 self.report_store.delete_report(record.message_id)
                 continue
-            author: discord.abc.User | None = None
-            try:
-                author = await self.fetch_user(record.author_id)
-            except (discord.NotFound, discord.Forbidden, discord.HTTPException):
-                author = channel.guild.get_member(record.author_id)
-            if author is None:
-                self.report_store.delete_report(record.message_id)
-                continue
-            context = ReportContext(
-                guild=channel.guild,
-                channel=channel,
-                message=report_message,
-                author=author,
-                images=[],
+            actions = HashActions(
                 hash_store=self.hash_store,
                 all_hashes=list(record.all_hashes),
                 mod_role_id=record.mod_role_id,
-                allow_hash_add=record.allow_hash_add,
-                kick_disabled=record.kick_disabled,
                 report_store=self.report_store,
-                report_record=record,
+                record=record,
             )
-            view = ReportView(context, timeout=None)
-            self.add_view(view, message_id=record.message_id)
+            if record.card is not None:
+                # The view only routes the button press; the card is redrawn
+                # from the clicked message, so no images are needed here.
+                self.add_view(ReportCard(record.card, [], actions), message_id=record.message_id)
+            else:
+                legacy = LegacyReportView(actions)
+                self.add_view(legacy, message_id=record.message_id)
+                buttons = {
+                    getattr(child, "custom_id", None)
+                    for row in report_message.components
+                    for child in getattr(row, "children", [])
+                }
+                if buttons & RETIRED_BUTTON_IDS:
+                    # Keep Add hashes only where the card already offered it.
+                    keep = legacy if ADD_HASHES_ID in buttons else None
+                    stale_cards.append((report_message, keep))
             restored += 1
         if restored:
             logger.info("Restored %s report views", restored)
+        if stale_cards:
+            asyncio.create_task(self._strip_retired_buttons(stale_cards))
+
+    async def _strip_retired_buttons(
+        self, cards: list[tuple[discord.Message, discord.ui.View | None]]
+    ) -> None:
+        """Take Kick, Ban and Dismiss off cards posted before they were retired."""
+        stripped = 0
+        for card, view in cards:
+            try:
+                await card.edit(view=view)
+                stripped += 1
+            except discord.HTTPException:
+                logger.exception("Could not strip retired buttons from card %s", card.id)
+        logger.info("Stripped retired buttons from %s older cards", stripped)
 
     def _get_resolved_settings(self, guild_id: int) -> ResolvedSettings:
         cached = self._settings_cache.get(guild_id)
