@@ -31,3 +31,9 @@ def compute_phashes(images: Iterable[bytes]) -> list[str]:
             )
             continue
     return hashes
+
+
+def compute_phash_or_none(image_bytes: bytes) -> str | None:
+    """Hash one image, or None when it cannot be decoded."""
+    hashes = compute_phashes([image_bytes])
+    return hashes[0] if hashes else None

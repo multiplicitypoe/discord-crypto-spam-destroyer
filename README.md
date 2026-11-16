@@ -1,6 +1,6 @@
 # Discord Crypto Scam Bot Destroyer
 
-This bot helps mods deal with the “3-4 pictures of twitter or a crypto exchange” crypto scam spam. It checks known bad image hashes first, then (optionally) asks OpenAI to scan images to see if they are scams. It’s very fast when dealing with known images and takes 2-3 seconds to delete/kick for brand new ones. This curently costs 1 cent per day for a 250k member server that gets a lot of these scam attempts.
+This bot helps mods deal with the “3-4 pictures of twitter or a crypto exchange” crypto scam spam. It checks known bad image hashes first, then (optionally) asks OpenAI to scan images to see if they are scams. Known images are deleted about half a second after they are posted, and brand new ones take 2-3 seconds while OpenAI looks at them. This curently costs 1 cent per day for a 250k member server that gets a lot of these scam attempts.
 
 ## What is this for?
 
@@ -109,7 +109,7 @@ Optional (defaults shown):
 - `HASH_ONLY_MODE` (false) - skip OpenAI and use hash denylist only.
 - `MIN_IMAGE_COUNT` (3) - min images required before OpenAI is called. Hash checks still run on any message with images. Channels in `FULL_SCAN_CHANNELS` are exempt.
 - `MAX_IMAGES_TO_ANALYZE` (4) - cap on images analyzed per message.
-- `PARALLEL_IMAGE_CLASSIFICATION` (false) - when true, classifies all selected images at once for speed; Costs **3x as much** if true. When false, runs sequentially with early-exit on high-confidence scams to reduce costs and still works fine for the common bot waves
+- `PARALLEL_IMAGE_CLASSIFICATION` (true) - sends each selected image to OpenAI at once and acts on the first confident scam verdict. Clean posts cost the same either way, since every image is scanned; only scam posts can cost a few extra requests. Set false to scan one image at a time, which is about a second slower per image
 - `KNOWN_BAD_HASH_PATH` (data/bad_hashes.txt) - your own list, written by `/add_hash` and the Report button. Git ignores it.
 - `DEFAULT_BAD_HASH_PATH` (data/default_bad_hashes.txt) - the list shipped with this repo, read only.
 - `ACTION_HIGH` (softban) - `kick`, `ban`, `softban` (ban+unban, deletes recent messages), or `report_only` for high confidence.

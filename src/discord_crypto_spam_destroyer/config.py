@@ -533,7 +533,7 @@ def load_settings() -> Settings:
         openai_max_image_dim=_env_int("OPENAI_MAX_IMAGE_DIM", 512),
         min_image_count=_env_int("MIN_IMAGE_COUNT", 3),
         max_images_to_analyze=_env_int("MAX_IMAGES_TO_ANALYZE", 4),
-        parallel_image_classification=_env_bool("PARALLEL_IMAGE_CLASSIFICATION", False),
+        parallel_image_classification=_env_bool("PARALLEL_IMAGE_CLASSIFICATION", True),
         known_bad_hash_path=_env("KNOWN_BAD_HASH_PATH", "data/bad_hashes.txt"),
         action_high=action_high,
         action_medium=action_medium,

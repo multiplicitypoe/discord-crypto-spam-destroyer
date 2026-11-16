@@ -15,6 +15,8 @@ RUN_ARGS = \
 	--env-file "$(CURDIR)/.env" \
 	-v "$(CURDIR)/data:/app/data"
 RUN_ARGS += $(HARDENED_ARGS)
+# Cap the json log; never put docker logs under logrotate.
+RUN_ARGS += --log-opt max-size=20m --log-opt max-file=3
 
 include docker.mk
 

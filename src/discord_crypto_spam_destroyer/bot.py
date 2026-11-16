@@ -21,8 +21,8 @@ from discord_crypto_spam_destroyer.discord_ui.mod_report import (
     suggested_next_step,
 )
 from discord_crypto_spam_destroyer.discord_ui.report_store import ReportRecord, ReportStore
-from discord_crypto_spam_destroyer.hashes.phash import compute_phashes
-from discord_crypto_spam_destroyer.hashes.store import FileHashStore, match_hashes
+from discord_crypto_spam_destroyer.hashes.phash import compute_phash_or_none, compute_phashes
+from discord_crypto_spam_destroyer.hashes.store import FileHashStore, is_degenerate_phash, match_hashes
 from discord_crypto_spam_destroyer.moderation.actions import apply_high_action, safe_delete
 from discord_crypto_spam_destroyer.moderation.decision import decision_from_result
 from discord_crypto_spam_destroyer.moderation.whitelist import is_channel_in_list
@@ -32,6 +32,34 @@ from discord_crypto_spam_destroyer.vision.openai_client import classify_images
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("discord_crypto_spam_destroyer")
+
+# A 2 MB PNG takes about 0.15s to decode on a Raspberry Pi 4 and a cold start
+# can take several times that. The old 2s limit for the whole post dropped
+# posts entirely, so the limit is now per image and generous, and an image that
+# hits it still goes to the OpenAI scan.
+HASH_TIMEOUT_S = 5.0
+
+
+def _is_known(phash: str | None, known_bad: set[str]) -> bool:
+    return bool(phash) and phash in known_bad and not is_degenerate_phash(phash)
+
+
+class _Timing:
+    """Seconds from the moment a post was made, read off its snowflake."""
+
+    def __init__(self, message_id: int, received: float) -> None:
+        self.posted = discord.utils.snowflake_time(message_id).timestamp()
+        self.received = received
+        self.matched: float | None = None
+        self.deleted: float | None = None
+
+    def describe(self) -> str:
+        parts = [f"received +{self.received - self.posted:.2f}s"]
+        if self.matched is not None:
+            parts.append(f"detected +{self.matched - self.posted:.2f}s")
+        if self.deleted is not None:
+            parts.append(f"deleted +{self.deleted - self.posted:.2f}s")
+        return ", ".join(parts)
 
 
 class CryptoSpamBot(discord.Client):
@@ -67,6 +95,7 @@ class CryptoSpamBot(discord.Client):
             return
 
         handler_start = time.monotonic()
+        timing = _Timing(message.id, received=time.time())
         if message.guild is None:
             logger.info("Message %s missing guild before processing", message.id)
             return
@@ -158,54 +187,41 @@ class CryptoSpamBot(discord.Client):
                 len(message.attachments),
                 len(attachments),
             )
-        downloaded: list[DownloadedImage] = []
-        download_start = time.monotonic()
-        download_target = min(len(attachments), settings.max_images_to_analyze)
-        for attachment in attachments[: settings.max_images_to_analyze]:
-            downloaded_image = await read_attachment(
-                attachment,
-                settings.max_image_bytes,
-                settings.download_timeout_s,
-            )
-            if downloaded_image:
-                downloaded.append(downloaded_image)
+        # Every image is fetched and hashed at once, and the post is actioned as
+        # soon as any one of them matches. Waiting for the whole post first made
+        # the slowest download decide how long a known scam stayed visible.
+        targets = attachments[: settings.max_images_to_analyze]
+        known_bad = self.hash_store.load()
+        fetches = [asyncio.create_task(self._fetch_and_hash(a, settings)) for a in targets]
+        early_action: asyncio.Task[tuple[bool, str, str]] | None = None
+        pending: set[asyncio.Task] = set(fetches)
+        while pending:
+            done, pending = await asyncio.wait(pending, return_when=asyncio.FIRST_COMPLETED)
+            if early_action is not None or is_allowlisted:
+                continue
+            if any(_is_known(task.result()[1], known_bad) for task in done):
+                timing.matched = time.time()
+                early_action = asyncio.create_task(
+                    self._act_on_hash_match(message, guild, settings, timing)
+                )
+
+        results = [task.result() for task in fetches]
+        downloaded = [image for image, _ in results if image is not None]
+        phashes = [phash for image, phash in results if image is not None and phash]
         if settings.debug_logs:
             logger.info(
-                "Message %s image download took %.2fs (%s/%s kept)",
+                "Message %s fetched and hashed %s/%s images in %.2fs",
                 message.id,
-                time.monotonic() - download_start,
                 len(downloaded),
-                download_target,
+                len(targets),
+                time.monotonic() - handler_start,
             )
-            if downloaded:
-                logger.info(
-                    "Message %s raw image sizes: %s",
-                    message.id,
-                    ", ".join(str(len(image.data)) for image in downloaded),
-                )
 
         if not downloaded:
             if settings.debug_logs:
                 logger.info("Message %s skipped: could not download images", message.id)
             return
 
-        images = [image.data for image in downloaded]
-        hash_start = time.monotonic()
-        try:
-            phashes = await asyncio.wait_for(
-                asyncio.to_thread(compute_phashes, images),
-                timeout=2.0,
-            )
-        except asyncio.TimeoutError:
-            logger.info("Message %s skipped: hash computation timed out", message.id)
-            return
-        if settings.debug_logs:
-            logger.info(
-                "Message %s hash computation took %.2fs",
-                message.id,
-                time.monotonic() - hash_start,
-            )
-        known_bad = self.hash_store.load()
         match = match_hashes(phashes, known_bad)
         if match.matched:
             logger.info(
@@ -220,22 +236,18 @@ class CryptoSpamBot(discord.Client):
                 action_result = "report only (allowlisted)"
                 author_roles = await self._format_author_roles(guild, message.author)
             else:
-                delete_result, author_roles, action_result = await self._delete_capture_roles_then_act(
-                    delete=lambda: safe_delete(message),
-                    capture_roles=lambda: self._format_author_roles(guild, message.author),
-                    act=lambda: self._apply_high_action_with_mod_check(
-                        guild,
-                        message.author,
-                        confidence=1.0,
-                        reason="Known bad crypto scam hash",
-                        settings=settings,
-                    ),
-                )
+                if early_action is None:
+                    timing.matched = timing.matched or time.time()
+                    early_action = asyncio.create_task(
+                        self._act_on_hash_match(message, guild, settings, timing)
+                    )
+                delete_result, author_roles, action_result = await early_action
             logger.info(
                 "Message %s action outcome: %s",
                 message.id,
                 self._format_action_taken(delete_result, action_result),
             )
+            logger.info("Message %s timing (hash): %s", message.id, timing.describe())
 
             if self._report_allowed(guild.id, message.author.id, settings):
                 logger.info("Report sent (hash match) for message %s", message.id)
@@ -259,10 +271,8 @@ class CryptoSpamBot(discord.Client):
                 )
             return
 
-        if not phashes:
-            if settings.debug_logs:
-                logger.info("Message %s skipped: no valid hashes", message.id)
-            return
+        # No hash is not a reason to stop: an image whose hash timed out or
+        # could not be computed still goes to the OpenAI scan below.
 
         selection = select_images(
             [a.url for a in attachments],
@@ -324,10 +334,13 @@ class CryptoSpamBot(discord.Client):
                 logger.info("Message %s not flagged: %s", message.id, decision.reason)
             return
 
+        timing.matched = time.time()
         if is_allowlisted:
             delete_result = False
         else:
             delete_result = await safe_delete(message)
+            timing.deleted = time.time()
+        logger.info("Message %s timing (vision): %s", message.id, timing.describe())
         author_roles = await self._format_author_roles(guild, message.author)
         if decision.confidence_band.value == "high":
             logger.info("Message %s high confidence scam", message.id)
@@ -383,6 +396,57 @@ class CryptoSpamBot(discord.Client):
             )
 
 
+    async def _fetch_and_hash(
+        self,
+        attachment: discord.Attachment,
+        settings: ResolvedSettings,
+    ) -> tuple[DownloadedImage | None, str | None]:
+        """Download one attachment and hash it. Never raises."""
+        try:
+            image = await read_attachment(
+                attachment,
+                settings.max_image_bytes,
+                settings.download_timeout_s,
+            )
+        except Exception:
+            logger.exception("Attachment %s could not be downloaded", getattr(attachment, "url", "?"))
+            return None, None
+        if image is None:
+            return None, None
+        try:
+            phash = await asyncio.wait_for(
+                asyncio.to_thread(compute_phash_or_none, image.data),
+                timeout=HASH_TIMEOUT_S,
+            )
+        except asyncio.TimeoutError:
+            logger.warning("Hashing %s timed out; it can still be scanned", image.filename)
+            phash = None
+        return image, phash
+
+    async def _act_on_hash_match(
+        self,
+        message: discord.Message,
+        guild: discord.Guild,
+        settings: ResolvedSettings,
+        timing: "_Timing",
+    ) -> tuple[bool, str, str]:
+        async def delete() -> bool:
+            deleted = await safe_delete(message)
+            timing.deleted = time.time()
+            return deleted
+
+        return await self._delete_capture_roles_then_act(
+            delete=delete,
+            capture_roles=lambda: self._format_author_roles(guild, message.author),
+            act=lambda: self._apply_high_action_with_mod_check(
+                guild,
+                message.author,
+                confidence=1.0,
+                reason="Known bad crypto scam hash",
+                settings=settings,
+            ),
+        )
+
     async def _classify_images(
         self,
         message_id: int,
@@ -424,32 +488,44 @@ class CryptoSpamBot(discord.Client):
                         height,
                         quality,
                     )
+            # Each image is its own request, and the first confident scam
+            # verdict ends the wait. The remaining requests still finish in
+            # their threads, but nothing waits on them.
             tasks = [
-                asyncio.to_thread(
-                    classify_images,
-                    api_key,
-                    settings.openai_model,
-                    [data_url],
-                    settings.openai_image_detail,
-                    [image_meta],
-                    settings.debug_logs,
+                asyncio.create_task(
+                    asyncio.to_thread(
+                        classify_images,
+                        api_key,
+                        settings.openai_model,
+                        [data_url],
+                        settings.openai_image_detail,
+                        [image_meta],
+                        settings.debug_logs,
+                    )
                 )
                 for data_url, image_meta in prepared
             ]
-            results = await asyncio.gather(*tasks)
-            if settings.debug_logs:
-                logger.info(
-                    "Classified %s images in parallel for message %s",
-                    total,
-                    message_id,
+            pending_scans: set[asyncio.Task] = set(tasks)
+            while pending_scans:
+                done, pending_scans = await asyncio.wait(
+                    pending_scans, return_when=asyncio.FIRST_COMPLETED
                 )
-            for result in results:
-                if result.is_crypto_scam:
-                    if best_scam is None or result.confidence > best_scam.confidence:
-                        best_scam = result
-                else:
-                    if best_non_scam is None or result.confidence > best_non_scam.confidence:
-                        best_non_scam = result
+                for task in done:
+                    try:
+                        result = task.result()
+                    except Exception:
+                        logger.exception("OpenAI request failed for one image of message %s", message_id)
+                        continue
+                    if result.is_crypto_scam:
+                        if result.confidence >= settings.confidence_high:
+                            for other in pending_scans:
+                                other.cancel()
+                            return result
+                        if best_scam is None or result.confidence > best_scam.confidence:
+                            best_scam = result
+                    else:
+                        if best_non_scam is None or result.confidence > best_non_scam.confidence:
+                            best_non_scam = result
         else:
             for index, image in enumerate(downloaded, start=1):
                 data_url, byte_size, content_type, width, height, quality = to_data_url(
