@@ -76,6 +76,25 @@ def parse_vision_response(raw_content: str) -> VisionResult:
     )
 
 
+# The library default is a 600s timeout with 2 retries, so one stuck request
+# could hold a scam post open for many minutes. A verdict normally takes 2 to
+# 3s. One image's verdict is enough to act, and the other images are scanned
+# at the same time, so a request that runs long is cut off rather than waited on.
+REQUEST_TIMEOUT_S = 12.0
+MAX_RETRIES = 1
+
+_clients: dict[str, OpenAI] = {}
+
+
+def _client(api_key: str) -> OpenAI:
+    """One client per key, so requests reuse the connection instead of a new TLS handshake each."""
+    client = _clients.get(api_key)
+    if client is None:
+        client = OpenAI(api_key=api_key, timeout=REQUEST_TIMEOUT_S, max_retries=MAX_RETRIES)
+        _clients[api_key] = client
+    return client
+
+
 def classify_images(
     api_key: str,
     model: str,
@@ -84,7 +103,7 @@ def classify_images(
     image_meta: list[dict[str, object]] | None = None,
     debug_logs: bool = False,
 ) -> VisionResult:
-    client = OpenAI(api_key=api_key)
+    client = _client(api_key)
     messages = build_vision_request(images_base64, image_detail)
     response = client.chat.completions.create(
         model=model,

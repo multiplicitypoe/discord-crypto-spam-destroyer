@@ -65,7 +65,8 @@ def test_classify_images_sends_the_model_options_and_reads_the_verdict(monkeypat
             )
 
     fake_client = SimpleNamespace(chat=SimpleNamespace(completions=FakeCompletions()))
-    monkeypatch.setattr(openai_client, "OpenAI", lambda api_key: fake_client)
+    monkeypatch.setattr(openai_client, "OpenAI", lambda api_key, **kwargs: fake_client)
+    monkeypatch.setattr(openai_client, "_clients", {})
 
     result = classify_images("key", "gpt-6-luna", ["data:image/jpeg;base64,AAAA"], "low")
 
@@ -74,3 +75,18 @@ def test_classify_images_sends_the_model_options_and_reads_the_verdict(monkeypat
     assert "temperature" not in sent
     assert sent["response_format"] == {"type": "json_object"}
     assert result.is_crypto_scam is True and result.confidence == 0.93
+
+
+def test_requests_are_bounded_and_the_client_is_reused(monkeypatch) -> None:
+    made = []
+
+    def fake_openai(api_key, **kwargs):
+        made.append(kwargs)
+        return object()
+
+    monkeypatch.setattr(openai_client, "OpenAI", fake_openai)
+    monkeypatch.setattr(openai_client, "_clients", {})
+    first = openai_client._client("k")
+    assert openai_client._client("k") is first
+    assert made == [{"timeout": openai_client.REQUEST_TIMEOUT_S, "max_retries": openai_client.MAX_RETRIES}]
+    assert openai_client.REQUEST_TIMEOUT_S <= 15
