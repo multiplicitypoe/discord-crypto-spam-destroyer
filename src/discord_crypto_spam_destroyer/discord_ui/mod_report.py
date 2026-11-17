@@ -52,8 +52,10 @@ def suggested_next_step(new_hashes: int, needs_review: bool) -> str | None:
     return None
 
 
+# A softban is a ban and an unban, so for a mod it is a kick that also clears
+# their recent messages. The card says what it amounts to.
 _ACTIONS = {
-    "softban": "author softbanned",
+    "softban": "author kicked",
     "ban": "author banned",
     "kick": "author kicked",
     "report_only": "reported only",

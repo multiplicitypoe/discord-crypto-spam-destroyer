@@ -43,7 +43,8 @@ def _actions(new_hashes):
 
 def test_the_card_says_how_fast_and_why_and_links_the_post():
     text = _text(ReportCard(_card(), ["attachment://image_1.png"], _actions(0)))
-    assert "Removed **0.52s** after it was posted · author softbanned" in text
+    assert "Removed **0.52s** after it was posted · author kicked" in text
+    assert "softban" not in text
     assert "[Crypto scam removed](https://discord.com/channels/1/2/3)" in text
     assert "4 of 4 images" in text
 
